@@ -5,9 +5,11 @@ Tempit is a small plugin for Oh My Zsh that helps you create, manage, and naviga
 ## Features
 
 - Create temporary directories with custom prefixes
-- List all tracked temporary directories with sizes
-- Navigate to temporary directories
-- Remove temporary directories
+- List all tracked temporary directories with detailed information (size, creation date, age, file count)
+- Navigate to temporary directories by number
+- Remove specific temporary directories by number
+- Search for directories containing specific text
+- Clean up all tracked temporary directories at once
 
 ## Installation
 
@@ -55,6 +57,9 @@ pip install -r requirements.txt
 | `templ` | List all tracked temporary directories |
 | `tempg <number>` | Go to (cd) the temporary directory by its number |
 | `tempr <number>` | Remove a temporary directory by its number |
+| `temps <term>` | Search for directories containing the specified term |
+| `tempclean` | Remove all tracked temporary directories (with confirmation) |
+| `temph` | Display help information about available commands |
 
 ### Examples
 
@@ -73,6 +78,15 @@ tempg 2
 
 # Remove temporary directory #1
 tempr 1
+
+# Search for directories containing "project"
+temps project
+
+# Remove all tracked temporary directories
+tempclean
+
+# Display help information
+temph
 ```
 
 ## License
