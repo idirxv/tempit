@@ -23,6 +23,18 @@ class TempitManager:
             with open(self.tempit_file, "w", encoding="utf-8") as _:
                 pass
 
+    def init_shell(self, shell: str):
+        """Initialize Tempit in the current shell"""
+        if shell in ["bash", "zsh"]:
+            init_script_path = os.path.join(os.path.dirname(__file__), "shell", "init.sh")
+            try:
+                with open(init_script_path, "r", encoding="utf-8") as f:
+                    print(f.read())
+            except FileNotFoundError:
+                print(colored(f"Error reading initialization script: {e}", "red"))
+        else:
+            print(colored(f"Unsupported shell: {shell}", "red"))
+
     def create(self, prefix: str = "tempit") -> str:
         """Create a new temporary directory and track it"""
         try:
