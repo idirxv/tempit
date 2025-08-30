@@ -1,5 +1,6 @@
 # pylint: disable=missing-module-docstring
 import datetime
+import logging
 import os
 import shutil
 import tempfile
@@ -17,7 +18,7 @@ class TempitManager:
         """Initialize the TempitManager"""
         self.tempit_file = tempit_file
         self.tempit_dir = os.path.dirname(self.tempit_file)
-
+        self.logger = logging.getLogger(__name__)
         # Ensure the file exists
         if not os.path.exists(self.tempit_file):
             with open(self.tempit_file, "w", encoding="utf-8") as _:
@@ -31,9 +32,9 @@ class TempitManager:
                 with open(init_script_path, "r", encoding="utf-8") as f:
                     print(f.read())
             except FileNotFoundError:
-                print(colored(f"Error reading initialization script: {e}", "red"))
+                self.logger.error("Error reading initialization script: %s", init_script_path)
         else:
-            print(colored(f"Unsupported shell: {shell}", "red"))
+            self.logger.error("Unsupported shell: %s", shell)
 
     def create(self, prefix: str = "tempit") -> str:
         """Create a new temporary directory and track it"""
@@ -44,11 +45,10 @@ class TempitManager:
             with open(self.tempit_file, "a", encoding="utf-8") as file:
                 file.write(f"{temp_dir}\n")
 
-            print(temp_dir)
             return temp_dir
 
         except (IOError, OSError) as e:
-            print(colored(f"Error creating temporary directory: {e}", "red"))
+            self.logger.error("Error creating temporary directory: %s", e)
             raise
 
     def _get_directory_size(self, directory: str) -> tuple:
@@ -141,7 +141,7 @@ class TempitManager:
             return ""
 
         if not 1 <= number <= len(directories):
-            print(colored(f"Invalid directory number: {number}", "red"))
+            self.logger.error("Invalid directory number: %s", number)
             return ""
 
         return directories[number - 1]
@@ -204,7 +204,7 @@ class TempitManager:
             directories = self.list_directories()
 
             if not directories:
-                print(colored("No temporary directories found.", "yellow"))
+                self.logger.warning("No temporary directories found.")
                 return
 
             # Create a nicely formatted table with enhanced information
@@ -213,7 +213,7 @@ class TempitManager:
                 row = self._format_directory_data(dir_path, i)
                 table_data.append(row)
 
-            print(colored("\n Temporary Directories", "green", attrs=["bold"]))
+            self.logger.info("\n Temporary Directories")
             headers = self._get_table_headers()
 
             # Use a more visually appealing table format
@@ -228,7 +228,7 @@ class TempitManager:
             print()  # Add a blank line after the table
 
         except FileNotFoundError:
-            print(colored("No temporary directories tracking file found.", "yellow"))
+            self.logger.warning("No temporary directories tracking file found.")
 
     def remove(self, number: int) -> bool:
         """Remove a tracked temporary directory by its number"""
@@ -238,7 +238,7 @@ class TempitManager:
             return False
 
         if not 1 <= number <= len(directories):
-            print(colored(f"Invalid directory number: {number}", "red"))
+            self.logger.error("Invalid directory number: %s", number)
             return False
 
         try:
@@ -246,14 +246,14 @@ class TempitManager:
             shutil.rmtree(directory)
 
             # Update tracking file
-            with open(self.tempit_file, "w") as file:
+            with open(self.tempit_file, "w", encoding="utf-8") as file:
                 file.writelines(f"{d}\n" for d in directories if d != directory)
 
-            print(colored(f"Removed temporary directory: {directory}", "green"))
+            self.logger.info("Removed temporary directory: %s", directory)
             return True
 
         except (IOError, OSError) as e:
-            print(colored(f"Error removing temporary directory: {e}", "red"))
+            self.logger.error("Error removing temporary directory: %s", e)
             return False
 
     def search_directories(self, search_str: str) -> None:
@@ -261,13 +261,13 @@ class TempitManager:
         directories = self.list_directories()
 
         if not directories:
-            print(colored("No temporary directories found.", "yellow"))
+            self.logger.warning("No temporary directories found.")
             return
 
         matching_indices = [i for i, d in enumerate(directories) if search_str in d]
 
         if not matching_indices:
-            print(colored(f"No directories found containing: {search_str}", "yellow"))
+            self.logger.warning("No directories found containing: %s", search_str)
             return
 
         # Create a nicely formatted table with original indices and enhanced display
@@ -277,7 +277,7 @@ class TempitManager:
             row = self._format_directory_data(dir_path, i)
             table_data.append(row)
 
-        print(colored(f"\n Directories containing '{search_str}'", "green", attrs=["bold"]))
+        self.logger.info("\n Directories containing '%s'", search_str)
         headers = self._get_table_headers()
 
         # Use a more visually appealing table format
@@ -293,17 +293,17 @@ class TempitManager:
         directories = self.list_directories()
 
         if not directories:
-            print(colored("No temporary directories found.", "yellow"))
+            self.logger.warning("No temporary directories found.")
             return
 
         for directory in directories:
             try:
                 shutil.rmtree(directory)
             except (IOError, OSError) as e:
-                print(colored(f"Error removing directory {directory}: {e}", "red"))
+                self.logger.error("Error removing directory %s: %s", directory, e)
 
         # Clear the tracking file
         with open(self.tempit_file, "w", encoding="utf-8") as _:
             pass
 
-        print(colored("All temporary directories have been removed.", "green"))
+        self.logger.info("All temporary directories have been removed.")
