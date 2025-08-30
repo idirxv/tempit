@@ -1,34 +1,35 @@
 # pylint: disable=missing-module-docstring
-# pylint: disable=unspecified-encoding
-import os
-import tempfile
-import shutil
 import datetime
+import os
+import shutil
+import tempfile
 from typing import List
-from termcolor import colored
-from tabulate import tabulate
+
 import humanize
+from tabulate import tabulate  # type: ignore[import-untyped]
+from termcolor import colored
+
 
 class TempitManager:
-    """ A class to manage temporary directories with persistent tracking """
+    """A class to manage temporary directories with persistent tracking"""
 
     def __init__(self, tempit_file: str = "/tmp/tempit_dirs.txt"):
-        """ Initialize the TempitManager """
+        """Initialize the TempitManager"""
         self.tempit_file = tempit_file
         self.tempit_dir = os.path.dirname(self.tempit_file)
 
         # Ensure the file exists
         if not os.path.exists(self.tempit_file):
-            with open(self.tempit_file, "w") as _:
+            with open(self.tempit_file, "w", encoding="utf-8") as _:
                 pass
 
     def create(self, prefix: str = "tempit") -> str:
-        """ Create a new temporary directory and track it """
+        """Create a new temporary directory and track it"""
         try:
             temp_dir = tempfile.mkdtemp(prefix=prefix + "_", dir=self.tempit_dir)
 
             # Append directory path to tracking file
-            with open(self.tempit_file, "a") as file:
+            with open(self.tempit_file, "a", encoding="utf-8") as file:
                 file.write(f"{temp_dir}\n")
 
             print(temp_dir)
@@ -39,7 +40,7 @@ class TempitManager:
             raise
 
     def _get_directory_size(self, directory: str) -> tuple:
-        """ Get the size of a directory in bytes. """
+        """Get the size of a directory in bytes."""
         total_size = 0
         for dirpath, _, filenames in os.walk(directory):
             for f in filenames:
@@ -48,7 +49,7 @@ class TempitManager:
         return total_size, humanize.naturalsize(total_size, binary=True)
 
     def _get_directory_info(self, directory: str) -> dict:
-        """ Get comprehensive information about a directory """
+        """Get comprehensive information about a directory"""
         # Get the directory size
         total_size, human_size = self._get_directory_size(directory)
 
@@ -66,7 +67,7 @@ class TempitManager:
         # Get directory name (last part of path without the prefix)
         dir_name = os.path.basename(directory)
         if dir_name.startswith("tempit_"):
-            dir_name = dir_name[len("tempit_"):]
+            dir_name = dir_name[len("tempit_") :]
         else:
             dir_name = dir_name.split("_", 1)[-1]
 
@@ -77,16 +78,16 @@ class TempitManager:
             "human_size": human_size,
             "created": creation_date,
             "file_count": file_count,
-            "dir_count": dir_count
+            "dir_count": dir_count,
         }
 
     def _get_directory_name(self, directory: str, index: int) -> str:
-        """ Get a user-friendly name for the directory based on its path and index """
+        """Get a user-friendly name for the directory based on its path and index"""
         dir_name = os.path.basename(directory)
 
         # Check if it follows the pattern prefix_randomchars
-        if '_' in dir_name:
-            prefix = dir_name.split('_')[0]
+        if "_" in dir_name:
+            prefix = dir_name.split("_")[0]
             # If it's a tempit directory, append the index
             if prefix == "tempit":
                 return f"{prefix}{index + 1}"
@@ -97,10 +98,12 @@ class TempitManager:
         return dir_name
 
     def list_directories(self) -> List[str]:
-        """ List all tracked temporary directories. """
+        """List all tracked temporary directories."""
         try:
-            with open(self.tempit_file, "r") as file:
-                directories = [line.strip() for line in file.readlines() if line.strip()]
+            with open(self.tempit_file, "r", encoding="utf-8") as file:
+                directories = [
+                    line.strip() for line in file.readlines() if line.strip()
+                ]
 
             if not directories:
                 return []
@@ -110,7 +113,7 @@ class TempitManager:
 
             if len(existing_dirs) != len(directories):
                 # Update file with only existing directories
-                with open(self.tempit_file, "w") as file:
+                with open(self.tempit_file, "w", encoding="utf-8") as file:
                     file.writelines(f"{d}\n" for d in existing_dirs)
 
             return existing_dirs
@@ -119,7 +122,7 @@ class TempitManager:
             return []
 
     def get_path_by_number(self, number: int) -> str:
-        """ Get the path of a tracked temporary directory by its number """
+        """Get the path of a tracked temporary directory by its number"""
         directories = self.list_directories()
 
         if not directories:
@@ -152,14 +155,14 @@ class TempitManager:
             size_color = "yellow"
         if info["size"] > 100 * 1024 * 1024:  # > 100MB
             size_color = "red"
-        human_size = colored(info["human_size"], size_color)
+        human_size = colored(info["human_size"], size_color)  # type: ignore[arg-type]
 
         # Age calculation
         age = humanize.naturaltime(datetime.datetime.now() - info["created"])
         age_color = "green"
         if "day" in age or "month" in age or "year" in age:
             age_color = "yellow"
-        colored_age = colored(age, age_color)
+        colored_age = colored(age, age_color)  # type: ignore[arg-type]
 
         return [
             colored(str(i + 1), "white", attrs=["bold"]),
@@ -168,7 +171,7 @@ class TempitManager:
             human_size,
             created_str,
             colored_age,
-            contents_info
+            contents_info,
         ]
 
     def _get_table_headers(self) -> list:
@@ -180,11 +183,11 @@ class TempitManager:
             colored("Size", "white", attrs=["bold"]),
             colored("Created", "white", attrs=["bold"]),
             colored("Age", "white", attrs=["bold"]),
-            colored("Contents", "white", attrs=["bold"])
+            colored("Contents", "white", attrs=["bold"]),
         ]
 
     def print_directories(self) -> None:
-        """ Print a formatted table of tracked temporary directories. """
+        """Print a formatted table of tracked temporary directories."""
         try:
             directories = self.list_directories()
 
@@ -202,19 +205,21 @@ class TempitManager:
             headers = self._get_table_headers()
 
             # Use a more visually appealing table format
-            print(tabulate(
-                table_data,
-                headers=headers,
-                tablefmt="rounded_grid",
-                numalign="center"
-            ))
+            print(
+                tabulate(
+                    table_data,
+                    headers=headers,
+                    tablefmt="rounded_grid",
+                    numalign="center",
+                )
+            )
             print()  # Add a blank line after the table
 
         except FileNotFoundError:
             print(colored("No temporary directories tracking file found.", "yellow"))
 
     def remove(self, number: int) -> bool:
-        """ Remove a tracked temporary directory by its number """
+        """Remove a tracked temporary directory by its number"""
         directories = self.list_directories()
 
         if not directories:
@@ -240,7 +245,7 @@ class TempitManager:
             return False
 
     def search_directories(self, search_str: str) -> None:
-        """ Search for directories containing the specified string """
+        """Search for directories containing the specified string"""
         directories = self.list_directories()
 
         if not directories:
@@ -264,16 +269,15 @@ class TempitManager:
         headers = self._get_table_headers()
 
         # Use a more visually appealing table format
-        print(tabulate(
-            table_data,
-            headers=headers,
-            tablefmt="rounded_grid",
-            numalign="center"
-        ))
+        print(
+            tabulate(
+                table_data, headers=headers, tablefmt="rounded_grid", numalign="center"
+            )
+        )
         print()  # Add a blank line after the table
 
     def clean_all_directories(self) -> None:
-        """ Remove all tracked temporary directories """
+        """Remove all tracked temporary directories"""
         directories = self.list_directories()
 
         if not directories:
@@ -287,7 +291,7 @@ class TempitManager:
                 print(colored(f"Error removing directory {directory}: {e}", "red"))
 
         # Clear the tracking file
-        with open(self.tempit_file, "w") as _:
+        with open(self.tempit_file, "w", encoding="utf-8") as _:
             pass
 
         print(colored("All temporary directories have been removed.", "green"))

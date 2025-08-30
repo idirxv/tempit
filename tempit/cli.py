@@ -3,11 +3,12 @@
 # pylint: disable=missing-module-docstring
 import argparse
 import sys
-from .core import TempitManager
+
+from tempit.core import TempitManager
 
 
 def main():
-    """ Main CLI entry point for the Tempit application """
+    """Main CLI entry point for the Tempit application"""
     parser = argparse.ArgumentParser(description="Manage temporary directories.")
     parser.add_argument("-c", "--create", nargs="?", const="tempit",
                         help="Create a new temporary directory.")
@@ -26,7 +27,7 @@ def main():
     manager = TempitManager()
 
     if args.create:
-        manager.create(args.create)
+        print(manager.create(args.create))
     elif args.list:
         manager.print_directories()
     elif args.get:
