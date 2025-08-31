@@ -19,7 +19,7 @@ dependencies = [
 tempit = "tempit.cli:main"
 
 [tool.poetry]
-packages = [{ include = "tempit" }]
+packages = ["tempit"]
 include = [
   { path = "tempit/shell/init.sh" }
 ]
