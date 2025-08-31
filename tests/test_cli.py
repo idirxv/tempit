@@ -1,99 +1,117 @@
+# pylint: disable=missing-module-docstring
 import sys
 
-import tempit.cli as cli
+import pytest
+
+from tempit import cli
+from tempit.core import TempitManager
 
 
-def test_cli_create(monkeypatch, capsys, tmp_path):
-    created = tmp_path / "tempit_created"
+@pytest.fixture
+def create_manager(tmp_path):
+    """Create a TempitManager instance with a temporary tracking file"""
+    return TempitManager(tempit_file=str(tmp_path / "tempit_dirs.txt"))
 
-    class DummyManager:
-        def create(self, prefix):
-            return str(created)
 
-    dummy = DummyManager()
-    monkeypatch.setattr(cli, "TempitManager", lambda: dummy)
-    monkeypatch.setattr(sys, "argv", ["tempit", "--create", "custom"])
+def test_cli_create(create_manager, monkeypatch):
+    monkeypatch.setattr(cli, "TempitManager", lambda: create_manager)
 
+    # Create a directory via CLI
+    monkeypatch.setattr(sys, "argv", ["tempit", "--create", "custom_prefix"])
     cli.main()
-    captured = capsys.readouterr()
-    assert str(created) in captured.out
+
+    # Check if the directory is created
+    list_dir = create_manager.list_directories()
+    assert len(list_dir) == 1
+    assert "custom_prefix" in list_dir[0]
 
 
-def test_cli_list(monkeypatch, capsys):
-    class DummyManager:
-        def print_directories(self):
-            print("listed")
+def test_cli_list(create_manager, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "TempitManager", lambda: create_manager)
 
-    monkeypatch.setattr(cli, "TempitManager", lambda: DummyManager())
+    # Create a directory
+    create_manager.create("custom_prefix1")
+    create_manager.create("custom_prefix2")
+
+    # List directories via CLI
     monkeypatch.setattr(sys, "argv", ["tempit", "--list"])
-
     cli.main()
+
     captured = capsys.readouterr()
-    assert "listed" in captured.out
+    assert "custom_prefix1" in captured.out
+    assert "custom_prefix2" in captured.out
 
 
-def test_cli_get(monkeypatch, capsys):
-    class DummyManager:
-        def get_path_by_number(self, number):
-            return f"/tmp/path{number}"
+def test_cli_get(create_manager, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "TempitManager", lambda: create_manager)
 
-    monkeypatch.setattr(cli, "TempitManager", lambda: DummyManager())
+    # Create directories
+    create_manager.create("custom_prefix1")
+    create_manager.create("custom_prefix2")
+
+    # Get directory via CLI
     monkeypatch.setattr(sys, "argv", ["tempit", "--get", "2"])
-
     cli.main()
+
     captured = capsys.readouterr()
-    assert "/tmp/path2" in captured.out
+    assert "custom_prefix2" in captured.out
 
 
-def test_cli_remove(monkeypatch):
-    calls = {}
+def test_cli_remove(create_manager, monkeypatch):
+    monkeypatch.setattr(cli, "TempitManager", lambda: create_manager)
 
-    class DummyManager:
-        def remove(self, number):
-            calls["number"] = number
+    # Create directories
+    create_manager.create("custom_prefix1")
+    create_manager.create("custom_prefix2")
 
-    monkeypatch.setattr(cli, "TempitManager", lambda: DummyManager())
-    monkeypatch.setattr(sys, "argv", ["tempit", "--remove", "3"])
-
+    # Remove directory via CLI
+    monkeypatch.setattr(sys, "argv", ["tempit", "--remove", "1"])
     cli.main()
-    assert calls["number"] == 3
+
+    # List directories via CLI
+    list_dir = create_manager.list_directories()
+    assert len(list_dir) == 1
+    assert "custom_prefix2" in list_dir[0]
 
 
-def test_cli_search(monkeypatch, capsys):
-    class DummyManager:
-        def search_directories(self, term):
-            print(f"search:{term}")
+def test_cli_search(create_manager, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "TempitManager", lambda: create_manager)
 
-    monkeypatch.setattr(cli, "TempitManager", lambda: DummyManager())
-    monkeypatch.setattr(sys, "argv", ["tempit", "--search", "foo"])
+    # Create directories
+    create_manager.create("custom_prefix1")
+    create_manager.create("custom_prefix2")
 
+    # Search directories via CLI
+    monkeypatch.setattr(sys, "argv", ["tempit", "--search", "custom"])
     cli.main()
+
     captured = capsys.readouterr()
-    assert "search:foo" in captured.out
+    
+    assert "custom_prefix1" in captured.out
+    assert "custom_prefix2" in captured.out
 
 
-def test_cli_clean_all(monkeypatch):
-    called = []
+def test_cli_clean_all(create_manager, monkeypatch):
+    monkeypatch.setattr(cli, "TempitManager", lambda: create_manager)
 
-    class DummyManager:
-        def clean_all_directories(self):
-            called.append(True)
+    # Create directories
+    create_manager.create("custom_prefix1")
+    create_manager.create("custom_prefix2")
 
-    monkeypatch.setattr(cli, "TempitManager", lambda: DummyManager())
+    # Clean all directories via CLI
     monkeypatch.setattr(sys, "argv", ["tempit", "--clean-all"])
-
     cli.main()
-    assert called
+
+    # List directories via CLI
+    list_dir = create_manager.list_directories()
+    assert len(list_dir) == 0
 
 
 def test_cli_init(monkeypatch, capsys):
-    class DummyManager:
-        def init_shell(self, shell):
-            print(f"init:{shell}")
 
-    monkeypatch.setattr(cli, "TempitManager", lambda: DummyManager())
     monkeypatch.setattr(sys, "argv", ["tempit", "--init", "bash"])
-
     cli.main()
+
     captured = capsys.readouterr()
-    assert "init:bash" in captured.out
+    
+    assert "TEMPIT_EXE" in captured.out
