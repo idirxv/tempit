@@ -15,6 +15,8 @@ def main() -> int:
     parser = ArgumentParser(description="Manage temporary directories.")
     parser.add_argument("-c", "--create", nargs="?", const="tempit",
                         help="Create a new temporary directory.")
+    parser.add_argument("-init", "--init", type=str,
+                        help="Initialize Tempit in the current shell.")
     parser.add_argument("-l", "--list", action="store_true",
                         help="List all tracked temporary directories.")
     parser.add_argument("-rm", "--remove", type=int,
@@ -27,7 +29,9 @@ def main() -> int:
     try:
         manager = TempitManager()
 
-        if args.create:
+        if args.init:
+            manager.init_shell(args.init)
+        elif args.create:
             print(manager.create(args.create))
         elif args.list:
             manager.print_directories()

@@ -19,6 +19,18 @@ class TempitManager:
         self.service = DirectoryService(storage_file.parent)
         self.renderer = DirectoryRenderer(self.storage, self.service)
 
+    def init_shell(self, shell: str) -> None:
+        """Initialize Tempit in the current shell."""
+        if shell in ["bash", "zsh"]:
+            init_script_path = Path(__file__).parent / "shell" / "init.sh"
+            try:
+                with init_script_path.open("r", encoding="utf-8") as f:
+                    print(f.read())
+            except FileNotFoundError:
+                self.logger.error("Error reading initialization script: %s", init_script_path)
+        else:
+            self.logger.error("Unsupported shell: %s", shell)
+
     def create(self, prefix: str = "tempit") -> Path:
         """Create a new temporary directory and track it."""
         try:
