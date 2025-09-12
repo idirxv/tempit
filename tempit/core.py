@@ -1,297 +1,77 @@
-# pylint: disable=missing-module-docstring
-import datetime
-import os
-import shutil
-import tempfile
-from typing import List
+"""Core module for the tempit application."""
 
-import humanize
-from tabulate import tabulate  # type: ignore[import-untyped]
-from termcolor import colored
+import logging
+from pathlib import Path
+
+from tempit.render import DirectoryRenderer
+from tempit.services import DirectoryService
+from tempit.storage import DirectoryStorage
 
 
 class TempitManager:
-    """A class to manage temporary directories with persistent tracking"""
+    """Main manager class for temporary directory operations."""
 
-    def __init__(self, tempit_file: str = "/tmp/tempit_dirs.txt"):
-        """Initialize the TempitManager"""
-        self.tempit_file = tempit_file
-        self.tempit_dir = os.path.dirname(self.tempit_file)
+    def __init__(self, storage_file: Path = Path("/tmp/tempit_dirs.json")):
+        """Initialize the TempitManager with dependency injection."""
+        self.logger = logging.getLogger(__name__)
 
-        # Ensure the file exists
-        if not os.path.exists(self.tempit_file):
-            with open(self.tempit_file, "w", encoding="utf-8") as _:
-                pass
+        self.storage = DirectoryStorage(storage_file)
+        self.service = DirectoryService(storage_file.parent)
+        self.renderer = DirectoryRenderer(self.storage, self.service)
 
-    def create(self, prefix: str = "tempit") -> str:
-        """Create a new temporary directory and track it"""
+    def create(self, prefix: str = "tempit") -> Path:
+        """Create a new temporary directory and track it."""
         try:
-            temp_dir = tempfile.mkdtemp(prefix=prefix + "_", dir=self.tempit_dir)
+            dir_info = self.service.create_temp_directory(prefix)
+            self.storage.add_directory(dir_info)
 
-            # Append directory path to tracking file
-            with open(self.tempit_file, "a", encoding="utf-8") as file:
-                file.write(f"{temp_dir}\n")
-
-            print(temp_dir)
-            return temp_dir
+            self.logger.info("Created temporary directory: %s", dir_info.path)
+            return dir_info.path
 
         except (IOError, OSError) as e:
-            print(colored(f"Error creating temporary directory: {e}", "red"))
+            self.logger.error("Error creating temporary directory: %s", e)
             raise
 
-    def _get_directory_size(self, directory: str) -> tuple:
-        """Get the size of a directory in bytes."""
-        total_size = 0
-        for dirpath, _, filenames in os.walk(directory):
-            for f in filenames:
-                fp = os.path.join(dirpath, f)
-                total_size += os.path.getsize(fp)
-        return total_size, humanize.naturalsize(total_size, binary=True)
+    def remove(self, number: int) -> bool:
+        """Remove a tracked temporary directory by its number."""
 
-    def _get_directory_info(self, directory: str) -> dict:
-        """Get comprehensive information about a directory"""
-        # Get the directory size
-        total_size, human_size = self._get_directory_size(directory)
-
-        # Get creation time
-        creation_time = os.path.getctime(directory)
-        creation_date = datetime.datetime.fromtimestamp(creation_time)
-
-        # Count files and subdirectories
-        file_count = 0
-        dir_count = 0
-        for _, dirs, files in os.walk(directory):
-            file_count += len(files)
-            dir_count += len(dirs)
-
-        # Get directory name (last part of path without the prefix)
-        dir_name = os.path.basename(directory)
-        if dir_name.startswith("tempit_"):
-            dir_name = dir_name[len("tempit_") :]
-        else:
-            dir_name = dir_name.split("_", 1)[-1]
-
-        return {
-            "path": directory,
-            "name": dir_name,
-            "size": total_size,
-            "human_size": human_size,
-            "created": creation_date,
-            "file_count": file_count,
-            "dir_count": dir_count,
-        }
-
-    def _get_directory_name(self, directory: str, index: int) -> str:
-        """Get a user-friendly name for the directory based on its path and index"""
-        dir_name = os.path.basename(directory)
-
-        # Check if it follows the pattern prefix_randomchars
-        if "_" in dir_name:
-            prefix = dir_name.split("_")[0]
-            # If it's a tempit directory, append the index
-            if prefix == "tempit":
-                return f"{prefix}{index + 1}"
-            # Otherwise just return the prefix
-            return prefix
-
-        # Fallback to the original basename if it doesn't match our pattern
-        return dir_name
-
-    def list_directories(self) -> List[str]:
-        """List all tracked temporary directories."""
         try:
-            with open(self.tempit_file, "r", encoding="utf-8") as file:
-                directories = [
-                    line.strip() for line in file.readlines() if line.strip()
-                ]
+            dir_path = self.storage.get_path_by_number(number)
+            if dir_path is None:
+                return False
 
-            if not directories:
-                return []
+            success = self.service.remove_directory(dir_path)
 
-            # Validate that directories still exist
-            existing_dirs = [d for d in directories if os.path.exists(d)]
+            if success:
+                self.storage.remove_directory(dir_path)
+                self.logger.info("Removed temporary directory: %s", dir_path)
+                return True
+            return False
 
-            if len(existing_dirs) != len(directories):
-                # Update file with only existing directories
-                with open(self.tempit_file, "w", encoding="utf-8") as file:
-                    file.writelines(f"{d}\n" for d in existing_dirs)
-
-            return existing_dirs
-
-        except FileNotFoundError:
-            return []
-
-    def get_path_by_number(self, number: int) -> str:
-        """Get the path of a tracked temporary directory by its number"""
-        directories = self.list_directories()
-
-        if not directories:
-            return ""
-
-        if not 1 <= number <= len(directories):
-            print(colored(f"Invalid directory number: {number}", "red"))
-            return ""
-
-        return directories[number - 1]
-
-    def _format_directory_data(self, dir_path: str, i: int) -> list:
-        """Helper method to format directory data for display in tables"""
-        info = self._get_directory_info(dir_path)
-        created_str = info["created"].strftime("%Y-%m-%d %H:%M")
-
-        # Get the friendly name
-        friendly_name = self._get_directory_name(dir_path, i)
-        name = colored(friendly_name, "cyan", attrs=["bold"])
-
-        # Format contents
-        contents_info = (
-            f"{colored(info['file_count'], 'blue')} files, "
-            f"{colored(info['dir_count'], 'blue')} dirs"
-        )
-
-        # Format size with appropriate color based on size
-        size_color = "green"
-        if info["size"] > 10 * 1024 * 1024:  # > 10MB
-            size_color = "yellow"
-        if info["size"] > 100 * 1024 * 1024:  # > 100MB
-            size_color = "red"
-        human_size = colored(info["human_size"], size_color)  # type: ignore[arg-type]
-
-        # Age calculation
-        age = humanize.naturaltime(datetime.datetime.now() - info["created"])
-        age_color = "green"
-        if "day" in age or "month" in age or "year" in age:
-            age_color = "yellow"
-        colored_age = colored(age, age_color)  # type: ignore[arg-type]
-
-        return [
-            colored(str(i + 1), "white", attrs=["bold"]),
-            name,
-            info["path"],
-            human_size,
-            created_str,
-            colored_age,
-            contents_info,
-        ]
-
-    def _get_table_headers(self) -> list:
-        """Return formatted table headers for directory listings"""
-        return [
-            colored("#", "white", attrs=["bold"]),
-            colored("Name", "white", attrs=["bold"]),
-            colored("Path", "white", attrs=["bold"]),
-            colored("Size", "white", attrs=["bold"]),
-            colored("Created", "white", attrs=["bold"]),
-            colored("Age", "white", attrs=["bold"]),
-            colored("Contents", "white", attrs=["bold"]),
-        ]
+        except (IOError, OSError) as e:
+            self.logger.error("Error removing temporary directory: %s", e)
+            return False
 
     def print_directories(self) -> None:
         """Print a formatted table of tracked temporary directories."""
-        try:
-            directories = self.list_directories()
-
-            if not directories:
-                print(colored("No temporary directories found.", "yellow"))
-                return
-
-            # Create a nicely formatted table with enhanced information
-            table_data = []
-            for i, dir_path in enumerate(directories):
-                row = self._format_directory_data(dir_path, i)
-                table_data.append(row)
-
-            print(colored("\n Temporary Directories", "green", attrs=["bold"]))
-            headers = self._get_table_headers()
-
-            # Use a more visually appealing table format
-            print(
-                tabulate(
-                    table_data,
-                    headers=headers,
-                    tablefmt="rounded_grid",
-                    numalign="center",
-                )
-            )
-            print()  # Add a blank line after the table
-
-        except FileNotFoundError:
-            print(colored("No temporary directories tracking file found.", "yellow"))
-
-    def remove(self, number: int) -> bool:
-        """Remove a tracked temporary directory by its number"""
-        directories = self.list_directories()
-
-        if not directories:
-            return False
-
-        if not 1 <= number <= len(directories):
-            print(colored(f"Invalid directory number: {number}", "red"))
-            return False
-
-        try:
-            directory = directories[number - 1]
-            shutil.rmtree(directory)
-
-            # Update tracking file
-            with open(self.tempit_file, "w") as file:
-                file.writelines(f"{d}\n" for d in directories if d != directory)
-
-            print(colored(f"Removed temporary directory: {directory}", "green"))
-            return True
-
-        except (IOError, OSError) as e:
-            print(colored(f"Error removing temporary directory: {e}", "red"))
-            return False
-
-    def search_directories(self, search_str: str) -> None:
-        """Search for directories containing the specified string"""
-        directories = self.list_directories()
-
-        if not directories:
-            print(colored("No temporary directories found.", "yellow"))
-            return
-
-        matching_indices = [i for i, d in enumerate(directories) if search_str in d]
-
-        if not matching_indices:
-            print(colored(f"No directories found containing: {search_str}", "yellow"))
-            return
-
-        # Create a nicely formatted table with original indices and enhanced display
-        table_data = []
-        for i in matching_indices:
-            dir_path = directories[i]
-            row = self._format_directory_data(dir_path, i)
-            table_data.append(row)
-
-        print(colored(f"\n Directories containing '{search_str}'", "green", attrs=["bold"]))
-        headers = self._get_table_headers()
-
-        # Use a more visually appealing table format
-        print(
-            tabulate(
-                table_data, headers=headers, tablefmt="rounded_grid", numalign="center"
-            )
-        )
-        print()  # Add a blank line after the table
+        directories = self.storage.get_existing_directories()
+        self.renderer.render_directory_list(directories)
 
     def clean_all_directories(self) -> None:
-        """Remove all tracked temporary directories"""
-        directories = self.list_directories()
+        """Remove all tracked temporary directories."""
+        directories = self.storage.get_existing_directories()
 
         if not directories:
-            print(colored("No temporary directories found.", "yellow"))
+            self.logger.warning("No temporary directories found.")
             return
 
-        for directory in directories:
+        removed_count = 0
+        for dir_info in directories:
             try:
-                shutil.rmtree(directory)
+                if self.service.remove_directory(dir_info.path):
+                    removed_count += 1
             except (IOError, OSError) as e:
-                print(colored(f"Error removing directory {directory}: {e}", "red"))
+                self.logger.error("Error removing directory %s: %s", dir_info.path, e)
 
-        # Clear the tracking file
-        with open(self.tempit_file, "w", encoding="utf-8") as _:
-            pass
-
-        print(colored("All temporary directories have been removed.", "green"))
+        self.storage.clear_all()
+        self.logger.info("Removed %s temporary directories.", removed_count)
