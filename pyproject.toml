@@ -12,7 +12,12 @@ authors = [{ name = "Idir Oura", email = "idir.oura@protonmail.com" }]
 dependencies = [
     "humanize",
     "tabulate",
-    "termcolor"
+    "termcolor",
+    "pytest (>=8.4.2,<9.0.0)",
+    "flake8 (>=7.3.0,<8.0.0)",
+    "ruff (>=0.13.0,<0.14.0)",
+    "mypy (>=1.18.1,<2.0.0)",
+    "pylint (>=3.3.8,<4.0.0)"
 ]
 
 [project.scripts]
