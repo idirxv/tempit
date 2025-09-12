@@ -1,94 +1,55 @@
-# Tempit - Temporary Directory Manager for Oh My Zsh
+# Tempit - Temporary Directory Manager
 
-Tempit is a small plugin for Oh My Zsh that helps you create, manage, and navigate temporary directories with ease. It provides a persistent tracking system so your temporary directories won't get lost.
-
+Tempit is a command-line utility and shell helper that lets you create, track, and jump to temporary directories without losing them.
 ## Features
 
-- Create temporary directories with custom prefixes
-- List all tracked temporary directories with detailed information (size, creation date, age, file count)
-- Navigate to temporary directories by number
-- Remove specific temporary directories by number
-- Search for directories containing specific text
-- Clean up all tracked temporary directories at once
+- Create temporary directories with optional prefixes.
+- List tracked directories with size, creation time, age, and file counts.
+- Jump to a directory by its number.
+- Remove individual directories or clean them all.
+- Works via shell integration.
 
 ## Installation
 
-### Manual Installation
-
-1. Clone the repository to your Oh My Zsh custom plugins directory:
+### Using pip
 
 ```bash
-git clone https://github.com/idirxv/tempit.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/tempit
+pip install tempit-manager
 ```
 
-2. Add the plugin to your `.zshrc` file:
+### Shell integration
+
+Add the following line to your shell startup file (`~/.bashrc` or `~/.zshrc`):
 
 ```bash
-plugins=(... tempit)
-```
+# Bash
+eval "$(tempit --init bash)"
 
-3. Reload your shell:
-
-```bash
-source ~/.zshrc
-```
-
-## Dependencies
-
-Tempit requires Python 3 and the following Python packages (included in requirements.txt):
-- humanize
-- tabulate
-- termcolor
-
-Install dependencies with:
-
-```bash
-cd ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/tempit
-pip install -r requirements.txt
+# Zsh
+eval "$(tempit --init zsh)"
 ```
 
 ## Usage
 
-### Commands
-
-| Command | Description |
-|---------|-------------|
-| `tempc [prefix]` | Create a new temporary directory (optional custom prefix) and cd into it |
-| `templ` | List all tracked temporary directories |
-| `tempg <number>` | Go to (cd) the temporary directory by its number |
-| `tempr <number>` | Remove a temporary directory by its number |
-| `temps <term>` | Search for directories containing the specified term |
-| `tempclean` | Remove all tracked temporary directories (with confirmation) |
-| `temph` | Display help information about available commands |
-
-### Examples
+### CLI commands
 
 ```bash
-# Create a temporary directory with default prefix
-tempc
-
-# Create a temporary directory with custom prefix
-tempc foo
-
-# List all tracked temporary directories
-templ
-
-# Navigate to temporary directory #2
-tempg 2
-
-# Remove temporary directory #1
-tempr 1
-
-# Search for directories containing "project"
-temps project
-
-# Remove all tracked temporary directories
-tempclean
-
-# Display help information
-temph
+tempit --create [prefix]
+tempit --list
+tempit --remove <number>
+tempit --clean-all
 ```
+
+### Aliases (after shell init)
+
+| Alias | Description |
+|-------|-------------|
+| `tempc [prefix]` | Create a new temporary directory and cd into it |
+| `tempg <number>` | Jump to a directory by its number |
+| `templ` | List tracked temporary directories |
+| `temprm <number>` | Remove a tracked temporary directory by its number |
+| `tempclean` | Remove all tracked temporary directories |
 
 ## License
 
-MIT License
+[MIT](LICENSE)
