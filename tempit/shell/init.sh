@@ -9,7 +9,7 @@ else
       create|-c)
         shift
         local __path
-        __path="$(command "$__TEMPIT_EXE" --create "$@")" || return $?
+        __path="$(command "$__TEMPIT_EXE" create "$@")" || return $?
         if [[ -n "$__path" && -d "$__path" ]]; then
           cd "$__path" || return $?
         fi
@@ -17,7 +17,7 @@ else
       go|-g)
         shift
         local __path
-        __path="$(command "$__TEMPIT_EXE" --path "$@")" || return $?
+        __path="$(command "$__TEMPIT_EXE" path "$@")" || return $?
         if [[ -n "$__path" && -d "$__path" ]]; then
           cd "$__path" || return $?
         fi
@@ -31,8 +31,8 @@ else
     # Aliases
     alias tempc="_tempit create"
     alias tempg="_tempit go"
-    alias templ="_tempit --list"
-    alias temprm="_tempit --remove"
-    alias tempclean="_tempit --clean-all"
+    alias templ="_tempit list"
+    alias temprm="_tempit remove"
+    alias tempclean="_tempit clean-all"
 
 fi
