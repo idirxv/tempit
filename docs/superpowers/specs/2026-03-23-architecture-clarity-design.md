@@ -19,7 +19,7 @@ The current architecture has four concrete issues:
 
 Two additional minor issues:
 - `storage.remove_directory()` always returns `True`, which is misleading.
-- `clean_all_directories()` calls `storage.clear_all()` even when some filesystem removals failed.
+- `clean_all_directories()` calls `storage.clear_all()` unconditionally at the end of the loop, wiping all storage records even for directories that failed filesystem removal.
 
 ---
 
@@ -70,12 +70,13 @@ cli.py
 
 - **Rename** `get_existing_directories()` → `get_all_directories()` — pure read, returns all stored entries without filtering or writing.
 - **Add** `prune_stale() -> None` — explicit method that removes entries whose paths no longer exist on the filesystem and writes back.
+- **Update** `get_path_by_number()` — currently calls `get_existing_directories()` internally; update it to call `get_all_directories()` only (pure read). The `prune_stale()` call before lookup is the responsibility of `TempitManager`, keeping storage methods free of side effects.
 - **Change** `remove_directory()` return type from `bool` to `None` — it either succeeds or raises; returning `True` unconditionally was misleading.
 
 ### `services.py`
 
 - **Remove** `calculate_directory_stats()`, `_get_directory_size()`, `_count_directory_contents()` — these move to `stats.py`.
-- `DirectoryService` retains only `create_temp_directory()` and `remove_directory()`.
+- `DirectoryService` retains only `create_temp_directory()` and `remove_directory()`. The return type of `remove_directory()` is **unchanged** — it keeps its `bool` return (unlike `storage.remove_directory()` which changes to `None`). This distinction matters: the `if success:` guard in `core.remove()` and `clean_all_directories()` depends on this `bool` return.
 
 ### `stats.py` *(new file)*
 
@@ -101,13 +102,15 @@ Pure function. No class, no state, no logger dependency. Takes a `DirectoryInfo`
 
 ### `core.py`
 
-- **`print_directories()`**: calls `storage.prune_stale()`, then `storage.get_all_directories()`, computes stats via `calculate_stats()` for each, passes `(info, stats)` pairs to renderer.
-- **`clean_all_directories()`**: only calls `storage.remove_directory(path)` for entries that were successfully removed from the filesystem (fixes the clear-all-even-on-failure bug).
+- **`print_directories()`**: calls `storage.prune_stale()`, then `storage.get_all_directories()`, computes stats via `calculate_stats()` for each. Entries where `calculate_stats()` returns `None` are filtered out before passing to the renderer. The renderer signature `list[tuple[DirectoryInfo, DirectoryStats]]` guarantees no `None` values reach it.
+- **`get_path_by_number()`**: calls `storage.prune_stale()` first, then delegates to `storage.get_path_by_number()`. This keeps the stale-filtering behavior for the `path`/`go` command while keeping storage methods side-effect-free.
+- **`clean_all_directories()`**: replace `storage.get_existing_directories()` with `storage.prune_stale()` + `storage.get_all_directories()`. Then only call `storage.remove_directory(path)` for entries that were successfully removed from the filesystem — fixing the clear-all-even-on-failure bug.
 - **Constructor**: `DirectoryService` no longer needs `storage_file.parent` — it uses `/tmp` as default directly, removing the implicit path coupling.
+- **`remove()`**: the `if success:` guard already prevents calling `storage.remove_directory()` when `service.remove_directory()` returns `False` (path already gone). The surrounding `try/except (IOError, OSError)` handles raises from the storage call itself. No additional wrapping needed. Note: the pre-existing behavior where a `False` return from `service.remove_directory()` leaves a stale storage entry is out of scope for this change.
 
 ### `pyproject.toml`
 
-Move `pytest`, `flake8`, `ruff`, `mypy`, `pylint` from `[project.dependencies]` to `[tool.poetry.group.dev.dependencies]`.
+Remove `pytest`, `flake8`, `ruff`, `mypy`, `pylint` from `[project.dependencies]` and add a new `[tool.poetry.group.dev.dependencies]` section (this section does not yet exist and must be created). Poetry group syntax coexists with the PEP 621 `[project]` table already used in this project and is supported by Poetry's build backend.
 
 ---
 
@@ -124,7 +127,8 @@ Move `pytest`, `flake8`, `ruff`, `mypy`, `pylint` from `[project.dependencies]` 
 - **`DirectoryRenderer`**: no constructor deps — instantiate directly, call `render_directory_list(pairs)`, assert output via `capsys`. No mocking needed.
 - **`calculate_stats()`**: pure function — test with a real `tmp_path` fixture, assert returned `DirectoryStats` fields.
 - **`TempitManager`**: inject mock/real storage + service as today, but with cleaner seams since renderer no longer needs service injected.
-- Existing tests in `test_core.py` should pass with minor updates to reflect the new method names (`get_all_directories` vs `get_existing_directories`).
+- Existing tests in `test_core.py` require three updates: lines 26, 43, and 53 each call `storage.get_existing_directories()` directly and must be updated to `storage.get_all_directories()`.
+- `test_get_path_by_number` (lines 33–34) calls `storage.get_path_by_number()` directly — a method whose internals change (no longer calls `prune_stale()`). The test remains valid as written since both paths exist at call time and no stale-pruning is needed.
 
 ---
 
