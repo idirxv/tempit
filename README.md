@@ -23,10 +23,10 @@ Add the following line to your shell startup file (`~/.bashrc` or `~/.zshrc`):
 
 ```bash
 # Bash
-eval "$(tempit --init bash)"
+eval "$(tempit init bash)"
 
 # Zsh
-eval "$(tempit --init zsh)"
+eval "$(tempit init zsh)"
 ```
 
 ## Usage
@@ -34,10 +34,11 @@ eval "$(tempit --init zsh)"
 ### CLI commands
 
 ```bash
-tempit --create [prefix]
-tempit --list
-tempit --remove <number>
-tempit --clean-all
+tempit create [prefix]
+tempit list
+tempit remove <number>
+tempit clean-all
+tempit init <shell>
 ```
 
 ### Aliases (after shell init)

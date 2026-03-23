@@ -69,6 +69,10 @@ class TempitManager:
         directories = self.storage.get_existing_directories()
         self.renderer.render_directory_list(directories)
 
+    def get_path_by_number(self, number: int):
+        """Return the path for a tracked directory by its number."""
+        return self.storage.get_path_by_number(number)
+
     def clean_all_directories(self) -> None:
         """Remove all tracked temporary directories."""
         directories = self.storage.get_existing_directories()

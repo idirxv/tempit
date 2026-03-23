@@ -1,55 +1,51 @@
-"""CLI module for the tempit application."""
-
-from argparse import ArgumentParser, SUPPRESS
 import logging
-import sys
-
+import typer
 from tempit.core import TempitManager
 
+app = typer.Typer(add_completion=False, help="CLI for the tempit application.")
 
-def main() -> int:
-    """Main CLI entry point for the Tempit application."""
-    # Set up basic logging
-    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
-
-    parser = ArgumentParser(description="Manage temporary directories.")
-    parser.add_argument("-c", "--create", nargs="?", const="tempit",
-                        help="Create a new temporary directory.")
-    parser.add_argument("-init", "--init", type=str,
-                        help="Initialize Tempit in the current shell.")
-    parser.add_argument("-l", "--list", action="store_true",
-                        help="List all tracked temporary directories.")
-    parser.add_argument("-rm", "--remove", type=int,
-                        help="Remove a tracked temporary directory by its number.")
-    parser.add_argument("--clean-all", action="store_true",
-                        help="Remove all tracked temporary directories.")
-    parser.add_argument("-p", "--path", type=int, help=SUPPRESS)
-    args = parser.parse_args()
-
+def get_manager() -> TempitManager:
+    """Helper pour initialiser le manager et gérer les erreurs globales."""
     try:
-        manager = TempitManager()
-
-        if args.init:
-            manager.init_shell(args.init)
-        elif args.create:
-            print(manager.create(args.create))
-        elif args.list:
-            manager.print_directories()
-        elif args.remove:
-            success = manager.remove(args.remove)
-            if not success:
-                return 1
-        elif args.clean_all:
-            manager.clean_all_directories()
-        elif args.path:
-            print(manager.storage.get_path_by_number(args.path))
-        else:
-            parser.print_help()
+        return TempitManager()
     except (IOError, OSError) as e:
         logging.error("An error occurred: %s", e)
-        return 1
-    return 0
+        raise typer.Exit(code=1)
 
+@app.command("create")
+def create_dir(name: str = typer.Argument(..., help="Name of the temporary directory.")):
+    """Create a new temporary directory."""
+    typer.echo(get_manager().create(name))
+
+@app.command("init")
+def init_shell(shell: str = typer.Argument(..., help="Shell name (e.g., bash, zsh).")):
+    """Initialize Tempit in the current shell."""
+    get_manager().init_shell(shell)
+
+@app.command("list")
+def list_dirs():
+    """List all tracked temporary directories."""
+    get_manager().print_directories()
+
+@app.command("remove")
+def remove_dir(number: int = typer.Argument(..., help="Number of the directory to remove.")):
+    """Remove a tracked temporary directory by its number."""
+    if not get_manager().remove(number):
+        raise typer.Exit(code=1)
+
+@app.command("clean-all")
+def clean_all():
+    """Remove all tracked temporary directories."""
+    get_manager().clean_all_directories()
+
+@app.command("path", hidden=True)
+def get_path(number: int):
+    """Get directory path by number."""
+    typer.echo(get_manager().get_path_by_number(number))
+
+def main():
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
+    app()
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
