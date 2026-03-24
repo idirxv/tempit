@@ -1,31 +1,26 @@
-"""Render directory information from JSON storage."""
+"""Render directory information as a rich table."""
 
 import sys
-from typing import List
+from typing import List, Tuple
 
 from rich.console import Console
 from rich.table import Table
 
 from tempit.models import DirectoryInfo, DirectoryStats
-from tempit.services import DirectoryService
-from tempit.stats import calculate_stats
-from tempit.storage import DirectoryStorage
 
 
 class DirectoryRenderer:
-    """Handles rendering of directory information from JSON storage."""
-
-    def __init__(self, storage: DirectoryStorage, service: DirectoryService):
-        self.storage = storage
-        self.service = service
+    """Renders (DirectoryInfo, DirectoryStats) pairs as a rich table. No external dependencies."""
 
     def render_directory_list(
-        self, directories: List[DirectoryInfo], title: str = "Temporary Directories"
+        self,
+        entries: List[Tuple[DirectoryInfo, DirectoryStats]],
+        title: str = "Temporary Directories",
     ) -> None:
-        """Render all directories as a rich table."""
-        console = Console(file=sys.stdout)
+        """Render a list of (info, stats) pairs as a rich table."""
+        console = Console(file=sys.stdout, width=None if sys.stdout.isatty() else 220)
 
-        if not directories:
+        if not entries:
             console.print("[yellow]No temporary directories found.[/yellow]")
             return
 
@@ -38,10 +33,7 @@ class DirectoryRenderer:
         table.add_column("Age")
         table.add_column("Contents")
 
-        for i, dir_info in enumerate(directories):
-            stats = calculate_stats(dir_info)
-            if not stats:
-                continue
+        for i, (dir_info, stats) in enumerate(entries):
             table.add_row(*self._create_table_row(dir_info, stats, i))
 
         console.print()
