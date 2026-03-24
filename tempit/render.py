@@ -8,6 +8,7 @@ from rich.table import Table
 
 from tempit.models import DirectoryInfo, DirectoryStats
 from tempit.services import DirectoryService
+from tempit.stats import calculate_stats
 from tempit.storage import DirectoryStorage
 
 
@@ -38,7 +39,7 @@ class DirectoryRenderer:
         table.add_column("Contents")
 
         for i, dir_info in enumerate(directories):
-            stats = self.service.calculate_directory_stats(dir_info)
+            stats = calculate_stats(dir_info)
             if not stats:
                 continue
             table.add_row(*self._create_table_row(dir_info, stats, i))
