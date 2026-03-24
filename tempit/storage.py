@@ -73,7 +73,3 @@ class DirectoryStorage:
         """Remove a directory entry from storage by path. Raises on write failure."""
         directories = self._read_directories()
         self._write_directories([d for d in directories if d.path != path])
-
-    def clear_all(self) -> None:
-        """Remove all directories from storage."""
-        self._write_directories([])
