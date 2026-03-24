@@ -30,7 +30,7 @@ def test_cli_create(create_manager, monkeypatch):
     runner.invoke(cli.app, ["create", "custom_prefix"])
     runner.invoke(cli.app, ["create", "tempit"])
 
-    directories = create_manager.storage.get_existing_directories()
+    directories = create_manager.storage.get_all_directories()
     assert len(directories) == 2
     assert "custom_prefix" == directories[0].prefix
     assert "tempit" == directories[1].prefix
@@ -59,7 +59,7 @@ def test_cli_remove(create_manager, monkeypatch):
     result = runner.invoke(cli.app, ["remove", "1"])
     assert result.exit_code == 0
 
-    list_dir = create_manager.storage.get_existing_directories()
+    list_dir = create_manager.storage.get_all_directories()
     assert len(list_dir) == 1
     assert "custom_prefix1" not in list_dir[0].prefix
     assert "custom_prefix2" in list_dir[0].prefix
@@ -75,5 +75,5 @@ def test_cli_clean_all(create_manager, monkeypatch):
     result = runner.invoke(cli.app, ["clean-all"])
     assert result.exit_code == 0
 
-    list_dir = create_manager.storage.get_existing_directories()
+    list_dir = create_manager.storage.get_all_directories()
     assert len(list_dir) == 0
