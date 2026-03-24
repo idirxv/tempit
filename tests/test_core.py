@@ -53,7 +53,7 @@ def test_clean_all_directories(tempit_manager):
     assert [] == tempit_manager.storage.get_all_directories()
 
 
-def test_get_all_directories_is_pure_read(tempit_manager, tmp_path):
+def test_get_all_directories_is_pure_read(tempit_manager):
     """get_all_directories() should not remove stale entries from storage."""
     # Create a dir, record it, then delete it from filesystem
     path = tempit_manager.create(prefix="stale")
