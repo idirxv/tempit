@@ -49,41 +49,27 @@ class DirectoryStorage:
         directories.append(directory_info)
         self._write_directories(directories)
 
-    def get_existing_directories(self) -> List[DirectoryInfo]:
-        """Get only directories that still exist on the filesystem."""
+    def get_all_directories(self) -> List[DirectoryInfo]:
+        """Read all stored directory entries. Pure read — no side effects."""
+        return self._read_directories()
+
+    def prune_stale(self) -> None:
+        """Remove entries for directories that no longer exist on the filesystem."""
         all_dirs = self._read_directories()
-        existing_dirs = [d for d in all_dirs if d.path.exists()]
-
-        # Update storage if some directories no longer exist
-        if len(existing_dirs) != len(all_dirs):
-            self._write_directories(existing_dirs)
-            self.logger.info("Refreshed directories list.")
-
-        return existing_dirs
+        existing = [d for d in all_dirs if d.path.exists()]
+        if len(existing) != len(all_dirs):
+            self._write_directories(existing)
+            self.logger.info("Pruned %d stale entries.", len(all_dirs) - len(existing))
 
     def get_path_by_number(self, number: int) -> Path | None:
-        """Get the path of a tracked temporary directory by its number."""
-        directories = self.get_existing_directories()
+        """Get the path of a tracked directory by its 1-based index."""
+        directories = self.get_all_directories()
         if not directories or not 1 <= number <= len(directories):
             self.logger.error("Invalid directory number: %s", number)
             return None
         return directories[number - 1].path
 
-    def remove_directory(self, path: Path) -> bool:
-        """Remove a directory from storage by path."""
+    def remove_directory(self, path: Path) -> None:
+        """Remove a directory entry from storage by path. Raises on write failure."""
         directories = self._read_directories()
-        directories = [d for d in directories if d.path != path]
-        self._write_directories(directories)
-        return True
-
-    def find_directory_by_path(self, path: Path) -> DirectoryInfo | None:
-        """Find a directory by its path."""
-        directories = self._read_directories()
-        for directory in directories:
-            if directory.path == path:
-                return directory
-        return None
-
-    def clear_all(self) -> None:
-        """Remove all directories from storage."""
-        self._write_directories([])
+        self._write_directories([d for d in directories if d.path != path])

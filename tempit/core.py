@@ -66,7 +66,7 @@ class TempitManager:
 
     def print_directories(self) -> None:
         """Print a formatted table of tracked temporary directories."""
-        directories = self.storage.get_existing_directories()
+        directories = self.storage.get_all_directories()
         self.renderer.render_directory_list(directories)
 
     def get_path_by_number(self, number: int):
@@ -75,7 +75,7 @@ class TempitManager:
 
     def clean_all_directories(self) -> None:
         """Remove all tracked temporary directories."""
-        directories = self.storage.get_existing_directories()
+        directories = self.storage.get_all_directories()
 
         if not directories:
             self.logger.warning("No temporary directories found.")
