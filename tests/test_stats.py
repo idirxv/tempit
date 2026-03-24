@@ -1,4 +1,3 @@
-from pathlib import Path
 import pytest
 from tempit.models import DirectoryInfo, DirectoryStats
 from tempit.stats import calculate_stats

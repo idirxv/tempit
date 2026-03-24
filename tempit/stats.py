@@ -1,7 +1,6 @@
 """Pure stats calculation for directory information."""
 
 from datetime import datetime
-from pathlib import Path
 
 import humanize
 
@@ -14,9 +13,12 @@ def calculate_stats(dir_info: DirectoryInfo) -> DirectoryStats | None:
     if not dir_path.exists():
         return None
 
-    total_size = sum(f.stat().st_size for f in dir_path.rglob("*") if f.is_file())
-    file_count = sum(1 for f in dir_path.rglob("*") if f.is_file())
-    dir_count = sum(1 for d in dir_path.rglob("*") if d.is_dir())
+    all_entries = list(dir_path.rglob("*"))
+    files = [f for f in all_entries if f.is_file()]
+    dirs = [d for d in all_entries if d.is_dir()]
+    total_size = sum(f.stat().st_size for f in files)
+    file_count = len(files)
+    dir_count = len(dirs)
 
     return DirectoryStats(
         size_bytes=total_size,
