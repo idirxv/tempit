@@ -1,10 +1,10 @@
 [build-system]
-requires = ["poetry-core>=2.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=2.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+build-backend = "poetry_dynamic_versioning.backend"
 
 [project]
 name = "tempit-manager"
-version = "1.0"
+dynamic = ["version"]
 description = "Manage and jump into temporary working directories"
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
@@ -19,10 +19,15 @@ dependencies = [
 tempit = "tempit.cli:main"
 
 [tool.poetry]
+version = "0.0"
 packages = [{ include = "tempit" }]
 include = [
   { path = "tempit/shell/init.sh" }
 ]
+
+[tool.poetry-dynamic-versioning]
+enable = true
+vcs = "git"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.4.2,<9.0.0"
