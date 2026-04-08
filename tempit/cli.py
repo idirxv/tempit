@@ -1,12 +1,29 @@
 """CLI entry point for the tempit application."""
 
 import logging
+from importlib.metadata import version
+from typing import Optional
 
 import typer
 
 from tempit.core import TempitManager
 
+
+def version_callback(value: bool):
+    if value:
+        typer.echo(version("tempit-manager"))
+        raise typer.Exit()
+
+
 app = typer.Typer(add_completion=False, help="CLI for the tempit application.")
+
+
+@app.callback()
+def callback(
+    version: Optional[bool] = typer.Option(None, "--version", "-v", callback=version_callback, is_eager=True,
+                                           help="Show version and exit."),
+):
+    pass
 
 
 def get_manager() -> TempitManager:
