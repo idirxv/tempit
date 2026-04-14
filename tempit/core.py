@@ -31,7 +31,7 @@ class TempitManager:
         else:
             self.logger.error("Unsupported shell: %s", shell)
 
-    def create(self, prefix: str = "tempit") -> Path:
+    def create(self, prefix: str) -> Path:
         """Create a new temporary directory and track it."""
         try:
             dir_info = self.service.create_temp_directory(prefix)

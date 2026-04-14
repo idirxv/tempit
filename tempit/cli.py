@@ -36,7 +36,7 @@ def get_manager() -> TempitManager:
 
 
 @app.command("create")
-def create_dir(name: str = typer.Argument("tempit_", help="Prefix for the temporary directory.")):
+def create_dir(name: str = typer.Argument("tempit", help="Prefix for the temporary directory.")):
     """Create a new temporary directory."""
     typer.echo(get_manager().create(name))
 

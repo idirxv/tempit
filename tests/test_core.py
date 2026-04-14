@@ -21,7 +21,7 @@ def test_init_shell(tempit_manager, capsys):
 
 def test_create_and_list_directories(tempit_manager):
     """Test creating and listing directories"""
-    file_path = tempit_manager.create()
+    file_path = tempit_manager.create(prefix="test")
     assert file_path.is_dir()
     assert file_path == tempit_manager.storage.get_all_directories()[0].path
 

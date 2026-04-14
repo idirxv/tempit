@@ -1,8 +1,8 @@
 """Service layer for directory operations."""
 
 import logging
+import secrets
 import shutil
-import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -17,13 +17,14 @@ class DirectoryService:
         self.temp_base_dir = temp_base_dir
         self.logger = logging.getLogger(__name__)
 
-    def create_temp_directory(self, prefix: str = "tempit") -> DirectoryInfo:
+    def create_temp_directory(self, prefix: str) -> DirectoryInfo:
         """Create a new temporary directory and return its info."""
         try:
-            temp_dir = tempfile.mkdtemp(prefix=f"{prefix}_", dir=self.temp_base_dir)
-
+            unique_name = f"{prefix}_{secrets.token_hex(4)}"
+            temp_dir = self.temp_base_dir / unique_name
+            temp_dir.mkdir(parents=True, exist_ok=False)
             return DirectoryInfo(
-                path=Path(temp_dir), created=datetime.now(), prefix=prefix
+                path=temp_dir, created=datetime.now(), prefix=prefix
             )
         except (IOError, OSError) as e:
             self.logger.error("Error creating temporary directory: %s", e)
