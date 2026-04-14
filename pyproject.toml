@@ -19,19 +19,22 @@ dependencies = [
 tempit = "tempit.cli:main"
 
 [tool.poetry]
-version = "0.0"
 packages = [{ include = "tempit" }]
 include = [
   { path = "tempit/shell/init.sh" }
 ]
+version = "0.0"
 
 [tool.poetry-dynamic-versioning]
 enable = true
 vcs = "git"
 
 [tool.poetry.group.dev.dependencies]
-pytest = ">=8.4.2,<9.0.0"
-flake8 = ">=7.3.0,<8.0.0"
+pytest = "^9.0.3"
 ruff = ">=0.13.0,<0.14.0"
 mypy = ">=1.18.1,<2.0.0"
-pylint = ">=3.3.8,<4.0.0"
+taskipy = "^1.14.1"
+
+[tool.taskipy.tasks]
+lint = "ruff check . && mypy --python-version 3.12 ."
+test = "pytest ."
