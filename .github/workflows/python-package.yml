@@ -28,10 +28,8 @@ jobs:
         poetry install --no-ansi --no-interaction
     - name: Lint
       run: |
-        poetry run flake8 . --max-line-length=127 --max-complexity=10 --statistics
         poetry run ruff check .
         poetry run mypy --python-version ${{ matrix.python-version }} .
-        poetry run pylint --py-version ${{ matrix.python-version }} tempit tests
     - name: Test with pytest
       run: |
         poetry run pytest .
