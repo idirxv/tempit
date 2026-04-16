@@ -1,55 +1,47 @@
-# Tempit - Temporary Directory Manager
+# Tempit — Temporary Directory Manager
 
-Tempit is a command-line utility and shell helper that lets you create, track, and jump to temporary directories without losing them.
-## Features
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/355fe09860a44384a5efe8580fbfc20a)](https://app.codacy.com/gh/idirxv/tempit/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-- Create temporary directories with optional prefixes.
-- List tracked directories with size, creation time, age, and file counts.
-- Jump to a directory by its number.
-- Remove individual directories or clean them all.
-- Works via shell integration.
+CLI + shell helper to create, track, and jump into temporary directories without losing them.
 
-## Installation
-
-### Using pip
+## Install
 
 ```bash
 pip install tempit-manager
 ```
 
-### Shell integration
-
-Add the following line to your shell startup file (`~/.bashrc` or `~/.zshrc`):
+Add shell integration to `~/.bashrc` or `~/.zshrc`:
 
 ```bash
-# Bash
-eval "$(tempit init bash)"
-
-# Zsh
-eval "$(tempit init zsh)"
+eval "$(tempit init bash)"   # or: zsh
 ```
 
 ## Usage
 
-### CLI commands
+After shell init, use the aliases:
+
+| Alias | Action |
+|-------|--------|
+| `tempc [prefix]` | Create temp dir and `cd` into it |
+| `tempg <n>` | Jump to tracked dir by number |
+| `templ` | List tracked dirs (size, age, file count) |
+| `temprm <n>` | Remove tracked dir by number |
+| `tempclean` | Remove all tracked dirs |
+
+Raw CLI:
 
 ```bash
 tempit create [prefix]
 tempit list
-tempit remove <number>
+tempit remove <n>
 tempit clean-all
 tempit init <shell>
+tempit --version
 ```
 
-### Aliases (after shell init)
-
-| Alias | Description |
-|-------|-------------|
-| `tempc [prefix]` | Create a new temporary directory and cd into it |
-| `tempg <number>` | Jump to a directory by its number |
-| `templ` | List tracked temporary directories |
-| `temprm <number>` | Remove a tracked temporary directory by its number |
-| `tempclean` | Remove all tracked temporary directories |
+Tracked metadata lives at `/tmp/tempit_dirs.json`.
 
 ## License
 
