@@ -4,43 +4,51 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-tempit-manager is a CLI utility and shell helper for creating, tracking, and jumping to temporary directories, built with Poetry.
+tempit is a Rust CLI and shell helper for creating, tracking, jumping into and saving temporary
+directories. Published on crates.io as `tempit` (v2+; v1.x was the `tempit-manager` Python package).
 
 ## Commands
 
 ```bash
-# Install dependencies
-poetry install
-
-# Run all tests
-poetry run pytest .
-
-# Run the linters
-poetry run flake8 . --max-line-length=127 --max-complexity=10 --statistics
-poetry run ruff check .
-poetry run mypy --python-version 3.12 .
-poetry run pylint --py-version 3.12 tempit tests
+cargo build
+cargo test                                   # unit + tests/cli.rs + tests/shell.rs
+cargo clippy --all-targets -- -D warnings    # pedantic lints are enabled in Cargo.toml
+cargo fmt
+shellcheck shell/common.sh && shellcheck --shell=bash shell/completion.bash
 ```
+
+`tests/shell.rs` runs real bash (and zsh when installed) against the built binary.
 
 ## Architecture
 
 ```
-CLI (cli.py) → TempitManager (core.py)
-                  ├── DirectoryStorage (storage.py)  — JSON persistence at /tmp/tempit_dirs.json
-                  ├── DirectoryService (services.py)  — temp dir creation/removal only
-                  ├── calculate_stats() (stats.py)    — pure function: DirectoryInfo → DirectoryStats | None
-                  └── DirectoryRenderer (render.py)   — rich table output, accepts (DirectoryInfo, DirectoryStats) pairs
+main.rs   parse CLI (cli.rs), build Config (config.rs), dispatch, print errors
+  ├── store.rs   Store: open (0700 root, owner check), list, create (flock'd), resolve
+  │              TrackedDir: remove, save_to
+  ├── name.rs    Label / DirRef / DirName: naming rules `<id>` or `<id>-<label>`
+  ├── fsx.rs     move_dir: no-clobber rename, cross-device copy fallback (copy_tree)
+  ├── stats.rs   DirStats::collect: size, counts, birth time (display only)
+  ├── render.rs  aligned table + human_size / human_age
+  └── shell.rs   embeds shell/common.sh + shell/completion.{bash,zsh}
 ```
 
-- **models.py**: `DirectoryInfo` (path, creation time, prefix; JSON-serializable) and `DirectoryStats` (size, counts, age).
-- **stats.py**: Pure `calculate_stats(dir_info)` function — no side effects, returns `None` for missing paths.
-- **storage.py**: `get_all_directories()` is a pure read; `prune_stale()` is the sole method that removes stale entries.
-- **shell/init.sh**: Bash/Zsh integration providing `tempc`, `tempg`, `templ`, `temprm`, `tempclean` aliases that wrap the CLI.
-- **Entry point**: `tempit.cli:main`, registered as console script `tempit`.
+- **The filesystem is the source of truth**: no index file. A directory is tracked iff it is in
+  the root and its name parses as `DirName`. Ids are stable; next id = highest + 1.
+- **Root**: `$TEMPIT_ROOT`, else `$TMPDIR/tempit-<uid>`. `save` defaults to `$TEMPIT_SAVE_DIR`
+  or `~/tempit`. Environment is read only in `Config::from_env`; everything else takes paths.
+- **Output contract**: stdout carries data only (paths, table, `__refs`); messages go to
+  stderr. Errors are one `Error` enum (thiserror) printed as `tempit: <msg>: <cause>`, exit 1.
+- **Shell integration**: `temp*` functions wrap the binary and never shadow `tempit`.
+  Completion lists subcommands by hand; `shell::tests` fails if one is missing.
+  Candidates come from the hidden `tempit __refs` command.
+- `cargo package` verification shares `target/` and can leave a stale `target/debug/tempit`;
+  run `cargo clean -p tempit` afterwards before trusting test results.
 
-## Key Details
+## Releasing
 
-- Tool is used via CLI and shell aliases.
+Bump `version` in `Cargo.toml`, push a matching `vX.Y.Z` tag. `.github/workflows/release.yml`
+checks the tag, builds Linux (musl) and macOS binaries, creates the GitHub release and
+publishes to crates.io via trusted publishing.
 
 
 ## Workflow Orchestration
