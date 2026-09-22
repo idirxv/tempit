@@ -1,8 +1,4 @@
-venv/
-__pycache__/
-*.pyc
+/target
 .env
 .idea/
 .vscode/
-.python-version
-dist/
