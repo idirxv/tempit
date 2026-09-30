@@ -2,6 +2,8 @@
 
 use clap::ValueEnum;
 
+use crate::error::{Error, Result};
+
 const BASH: &str = concat!(
     include_str!("../shell/common.sh"),
     include_str!("../shell/completion.bash")
@@ -19,11 +21,39 @@ pub enum Shell {
 }
 
 impl Shell {
+    /// The shell named `name` (typically the basename of `$SHELL`).
+    pub fn detect(name: Option<&str>) -> Result<Self> {
+        let name = name.ok_or(Error::UnknownShell(None))?;
+        Self::from_str(name, true).map_err(|_| Error::UnknownShell(Some(name.to_owned())))
+    }
+
     /// Script defining the `temp*` functions and tab completion, meant to be `eval`ed.
     pub fn init_script(self) -> &'static str {
         match self {
             Self::Bash => BASH,
             Self::Zsh => ZSH,
+        }
+    }
+
+    /// What to tell a person who runs `tempit init` in a terminal rather than `eval`ing it.
+    pub fn setup_instructions(self) -> String {
+        let name = self.name();
+        let where_ = match self {
+            Self::Bash => "~/.bashrc",
+            Self::Zsh => "~/.zshrc, after compinit",
+        };
+        format!(
+            "To enable the tempc, tempg, templ, temprm, tempsave and tempclean functions and tab\n\
+             completion, add this line to {where_}:\n\
+             \n    eval \"$(tempit init {name})\"\n\
+             \nthen open a new terminal. To read the script itself: tempit init {name} | less\n"
+        )
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Bash => "bash",
+            Self::Zsh => "zsh",
         }
     }
 }
@@ -50,6 +80,34 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn detects_the_shell_by_name() {
+        assert_eq!(Shell::detect(Some("zsh")).unwrap(), Shell::Zsh);
+        assert_eq!(Shell::detect(Some("bash")).unwrap(), Shell::Bash);
+        assert!(matches!(
+            Shell::detect(Some("fish")),
+            Err(Error::UnknownShell(Some(name))) if name == "fish"
+        ));
+        assert!(matches!(
+            Shell::detect(None),
+            Err(Error::UnknownShell(None))
+        ));
+    }
+
+    #[test]
+    fn instructions_and_tips_cover_every_shell() {
+        let tip = Error::UnknownShell(None).tip().unwrap();
+        for shell in Shell::value_variants() {
+            let instructions = shell.setup_instructions();
+            let line = format!("eval \"$(tempit init {})\"", shell.name());
+            assert!(instructions.contains(&line), "{instructions}");
+            assert!(
+                tip.contains(shell.name()),
+                "the tip does not mention {shell:?}"
+            );
         }
     }
 

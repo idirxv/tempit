@@ -17,6 +17,7 @@ anstream = "1.0.0"
 anstyle = "1.0.14"
 clap = { version = "4.6.7", features = ["derive", "wrap_help"] }
 rustix = { version = "1.1.5", features = ["fs", "process"] }
+strsim = "0.11"
 thiserror = "2.0.20"
 walkdir = "2.5.0"
 

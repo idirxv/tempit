@@ -416,6 +416,7 @@ dependencies = [
  "clap",
  "predicates",
  "rustix",
+ "strsim",
  "tempfile",
  "thiserror",
  "walkdir",

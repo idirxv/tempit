@@ -8,11 +8,11 @@ use crate::name::{DirRef, Label};
 use crate::shell::Shell;
 
 const AFTER_HELP: &str = "\
-Directories are referred to by id (e.g. 3) or by label (e.g. bugfix).
+Without a command, tempit lists your directories. Refer to a directory by its
+id (3), its label (bugfix), or `.` for the one you are in.
 
 Shell integration adds tempc, tempg, templ, temprm, tempsave and tempclean,
-which cd for you, plus tab completion. Add this to ~/.bashrc or ~/.zshrc:
-  eval \"$(tempit init bash)\"   # or zsh
+which cd for you, plus tab completion. Run `tempit init` to set it up.
 
 Environment:
   TEMPIT_ROOT      where directories are created [default: $TMPDIR/tempit-<uid>]
@@ -23,7 +23,7 @@ Environment:
 #[command(version, after_help = AFTER_HELP)]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Command,
+    pub command: Option<Command>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -31,17 +31,17 @@ pub enum Command {
     /// Create a temporary directory and print its path
     #[command(visible_alias = "new")]
     Create {
-        /// Label appended to the directory name, e.g. `3-bugfix`
+        /// Unique label appended to the directory name, e.g. `3-bugfix`
         label: Option<Label>,
     },
 
-    /// List tracked directories
+    /// List directories (the default command)
     #[command(visible_alias = "ls")]
     List,
 
     /// Print the path of a directory
     Path {
-        /// Id or label of the directory [default: the most recent]
+        /// Id, label or `.` [default: the most recent directory]
         #[arg(value_name = "REF")]
         reference: Option<DirRef>,
     },
@@ -49,23 +49,23 @@ pub enum Command {
     /// Delete directories and their contents
     #[command(visible_alias = "rm")]
     Remove {
-        /// Ids or labels of the directories
+        /// Ids, labels or `.`
         #[arg(value_name = "REF", required = true)]
         references: Vec<DirRef>,
     },
 
     /// Move a directory out of the temporary area to keep it
     Save {
-        /// Id or label of the directory
+        /// Id, label or `.` [default: the directory you are in]
         #[arg(value_name = "REF")]
-        reference: DirRef,
+        reference: Option<DirRef>,
 
         /// Existing directory to move it into, or its new path [default: the save directory]
         #[arg(value_name = "DEST")]
         destination: Option<PathBuf>,
     },
 
-    /// Delete all tracked directories
+    /// Delete all directories, after confirmation
     #[command(alias = "clean-all")]
     Clean {
         /// Do not ask for confirmation
@@ -73,8 +73,11 @@ pub enum Command {
         yes: bool,
     },
 
-    /// Print the shell integration script
-    Init { shell: Shell },
+    /// Set up the shell integration (prints the script to `eval`)
+    Init {
+        /// Shell to integrate with [default: detected from $SHELL]
+        shell: Option<Shell>,
+    },
 
     /// Print `<id>\t<label>` lines for shell completion
     #[command(name = "__refs", hide = true)]

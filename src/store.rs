@@ -2,8 +2,9 @@
 //! tracked if and only if it lives in the root and is named `<id>` or `<id>-<label>`.
 
 use std::fs::{self, DirBuilder, File};
+use std::io;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::error::{Error, IoContext, Result};
 use crate::fsx;
@@ -34,7 +35,14 @@ impl TrackedDir {
             destination.to_path_buf()
         };
         if let Some(parent) = target.parent() {
-            let parent = fs::canonicalize(parent).context("resolve", parent)?;
+            let parent = fs::canonicalize(parent).map_err(|err| match err.kind() {
+                io::ErrorKind::NotFound => Error::MissingParent(parent.to_path_buf()),
+                _ => Error::Io {
+                    action: "resolve",
+                    path: parent.to_path_buf(),
+                    source: err,
+                },
+            })?;
             let source = fs::canonicalize(&self.path).context("resolve", &self.path)?;
             if parent.starts_with(&source) {
                 return Err(Error::SaveIntoItself(self.path.clone()));
@@ -80,6 +88,10 @@ impl Store {
         Ok(Self { root })
     }
 
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
     /// All tracked directories, sorted by id.
     pub fn list(&self) -> Result<Vec<TrackedDir>> {
         let mut dirs = Vec::new();
@@ -101,10 +113,23 @@ impl Store {
     }
 
     /// Creates a directory with the next free id: one more than the highest in use.
+    ///
+    /// Labels are unique, so that a label always designates a single directory.
     pub fn create(&self, label: Option<Label>) -> Result<TrackedDir> {
-        // Serialise id allocation with other tempit processes.
+        // Serialise id allocation and label checks with other tempit processes.
         let _lock = self.lock()?;
-        let id = match self.list()?.last() {
+        let dirs = self.list()?;
+        if let Some(label) = &label
+            && let Some(taken) = dirs
+                .iter()
+                .find(|dir| dir.name.label.as_ref() == Some(label))
+        {
+            return Err(Error::LabelTaken {
+                label: label.clone(),
+                name: taken.name.to_string(),
+            });
+        }
+        let id = match dirs.last() {
             Some(dir) => dir.name.id.checked_add(1).ok_or(Error::IdsExhausted)?,
             None => 1,
         };
@@ -114,13 +139,41 @@ impl Store {
         Ok(TrackedDir { name, path })
     }
 
-    /// Finds the directory designated by `reference`, or the most recent one if `None`.
-    pub fn resolve(&self, reference: Option<&DirRef>) -> Result<TrackedDir> {
-        let dirs = self.list()?;
-        match reference {
-            Some(reference) => find(dirs, reference),
-            None => dirs.into_iter().last().ok_or(Error::Empty),
+    /// Finds the directory designated by `reference`. `cwd` is what `.` is relative to.
+    pub fn resolve(&self, reference: &DirRef, cwd: Option<&Path>) -> Result<TrackedDir> {
+        if *reference == DirRef::Current {
+            let current = match cwd {
+                Some(cwd) => self.containing(cwd)?,
+                None => None,
+            };
+            return current.ok_or(Error::NotInTempDir);
         }
+        find(&self.list()?, reference)
+    }
+
+    /// The most recently created directory.
+    pub fn latest(&self) -> Result<TrackedDir> {
+        self.list()?.pop().ok_or(Error::Empty)
+    }
+
+    /// The tracked directory that is or contains `path`, if any.
+    pub fn containing(&self, path: &Path) -> Result<Option<TrackedDir>> {
+        let root = fs::canonicalize(&self.root).context("resolve", &self.root)?;
+        // A path that cannot be resolved, e.g. because it was deleted, is in no directory.
+        let Ok(path) = fs::canonicalize(path) else {
+            return Ok(None);
+        };
+        let first = path
+            .strip_prefix(&root)
+            .ok()
+            .and_then(|inside| inside.components().next());
+        let Some(Component::Normal(name)) = first else {
+            return Ok(None);
+        };
+        Ok(self
+            .list()?
+            .into_iter()
+            .find(|dir| dir.path.file_name() == Some(name)))
     }
 
     fn lock(&self) -> Result<File> {
@@ -136,20 +189,48 @@ impl Store {
     }
 }
 
-/// Picks the single directory matching `reference`.
-fn find(dirs: Vec<TrackedDir>, reference: &DirRef) -> Result<TrackedDir> {
-    let mut matches: Vec<TrackedDir> = dirs
-        .into_iter()
+/// Picks the single directory matching `reference` by id or label.
+fn find(dirs: &[TrackedDir], reference: &DirRef) -> Result<TrackedDir> {
+    let matches: Vec<&TrackedDir> = dirs
+        .iter()
         .filter(|dir| dir.name.matches(reference))
         .collect();
-    match matches.len() {
-        0 => Err(Error::NotFound(reference.clone())),
-        1 => Ok(matches.remove(0)),
+    match matches.as_slice() {
+        [dir] => Ok((*dir).clone()),
+        [] => Err(Error::NotFound {
+            reference: reference.clone(),
+            similar: similar_label(dirs, reference),
+        }),
         _ => Err(Error::Ambiguous {
             reference: reference.clone(),
             names: matches.iter().map(|dir| dir.name.to_string()).collect(),
         }),
     }
+}
+
+/// The existing label closest to a mistyped one, if one is close enough: a label the input
+/// is a prefix of, or one within a few typos (Damerau-Levenshtein, which counts a
+/// transposition as one edit; case is ignored).
+fn similar_label(dirs: &[TrackedDir], reference: &DirRef) -> Option<Label> {
+    let DirRef::Label(wanted) = reference else {
+        return None;
+    };
+    let wanted = wanted.as_str().to_lowercase();
+    let max_typos = (wanted.chars().count() / 3).max(1);
+    dirs.iter()
+        .filter_map(|dir| dir.name.label.as_ref())
+        .map(|label| {
+            let candidate = label.as_str().to_lowercase();
+            let distance = if candidate.starts_with(&wanted) {
+                0
+            } else {
+                strsim::damerau_levenshtein(&wanted, &candidate)
+            };
+            (distance, label)
+        })
+        .filter(|(distance, _)| *distance <= max_typos)
+        .min_by_key(|(distance, _)| *distance)
+        .map(|(_, label)| label.clone())
 }
 
 #[cfg(test)]
@@ -261,38 +342,100 @@ mod tests {
     }
 
     #[test]
-    fn resolve_by_id_label_or_latest() {
+    fn labels_are_unique() {
+        let (_tmp, store) = store();
+        store.create(label("api")).unwrap();
+        match store.create(label("api")) {
+            Err(Error::LabelTaken { name, .. }) => assert_eq!(name, "1-api"),
+            other => panic!("expected the label to be taken, got {other:?}"),
+        }
+        assert_eq!(names(&store), ["1-api"]);
+    }
+
+    #[test]
+    fn resolve_by_id_or_label() {
         let (_tmp, store) = store();
         let first = store.create(label("alpha")).unwrap();
         let second = store.create(None).unwrap();
 
-        assert_eq!(store.resolve(Some(&DirRef::Id(1))).unwrap(), first);
+        assert_eq!(store.resolve(&DirRef::Id(1), None).unwrap(), first);
         assert_eq!(
-            store.resolve(Some(&"alpha".parse().unwrap())).unwrap(),
+            store.resolve(&"alpha".parse().unwrap(), None).unwrap(),
             first
         );
-        assert_eq!(store.resolve(None).unwrap(), second);
+        assert_eq!(store.latest().unwrap(), second);
         assert!(matches!(
-            store.resolve(Some(&DirRef::Id(9))),
-            Err(Error::NotFound(DirRef::Id(9)))
+            store.resolve(&DirRef::Id(9), None),
+            Err(Error::NotFound {
+                reference: DirRef::Id(9),
+                similar: None
+            })
         ));
     }
 
     #[test]
-    fn resolve_reports_ambiguous_labels() {
+    fn resolve_suggests_a_similar_label() {
         let (_tmp, store) = store();
-        store.create(label("same")).unwrap();
-        store.create(label("same")).unwrap();
-        match store.resolve(Some(&"same".parse().unwrap())) {
+        store.create(label("test")).unwrap();
+        store.create(label("api")).unwrap();
+        store.create(label("bugfix")).unwrap();
+
+        let similar = |wanted: &str| match store.resolve(&wanted.parse().unwrap(), None) {
+            Err(Error::NotFound { similar, .. }) => similar.map(|l| l.to_string()),
+            other => panic!("expected not found, got {other:?}"),
+        };
+        assert_eq!(similar("tst").as_deref(), Some("test"));
+        assert_eq!(similar("apo").as_deref(), Some("api"));
+        assert_eq!(similar("aip").as_deref(), Some("api"), "transposition");
+        assert_eq!(similar("API").as_deref(), Some("api"), "case");
+        assert_eq!(similar("bu").as_deref(), Some("bugfix"), "prefix");
+        assert_eq!(similar("bugfxi").as_deref(), Some("bugfix"));
+        assert_eq!(similar("zzz"), None);
+        assert_eq!(similar("xyz"), None);
+    }
+
+    #[test]
+    fn resolve_the_current_directory_from_anywhere_inside_it() {
+        let (tmp, store) = store();
+        store.create(None).unwrap();
+        let dir = store.create(label("work")).unwrap();
+        let nested = dir.path.join("src/deep");
+        fs::create_dir_all(&nested).unwrap();
+
+        for cwd in [&dir.path, &nested] {
+            assert_eq!(store.resolve(&DirRef::Current, Some(cwd)).unwrap(), dir);
+        }
+        for cwd in [Some(tmp.path()), Some(store.root()), None] {
+            assert!(matches!(
+                store.resolve(&DirRef::Current, cwd),
+                Err(Error::NotInTempDir)
+            ));
+        }
+    }
+
+    #[test]
+    fn containing_ignores_paths_that_do_not_exist() {
+        let (_tmp, store) = store();
+        let dir = store.create(None).unwrap();
+        assert_eq!(store.containing(&dir.path.join("missing")).unwrap(), None);
+    }
+
+    #[test]
+    fn resolve_reports_ambiguous_labels() {
+        // Only possible with directories created by hand: `create` keeps labels unique.
+        let (_tmp, store) = store();
+        fs::create_dir(store.root().join("1-same")).unwrap();
+        fs::create_dir(store.root().join("2-same")).unwrap();
+        match store.resolve(&"same".parse().unwrap(), None) {
             Err(Error::Ambiguous { names, .. }) => assert_eq!(names, ["1-same", "2-same"]),
             other => panic!("expected an ambiguity error, got {other:?}"),
         }
     }
 
     #[test]
-    fn resolve_latest_of_nothing_is_an_error() {
+    fn latest_of_nothing_is_an_error() {
         let (_tmp, store) = store();
-        assert!(matches!(store.resolve(None), Err(Error::Empty)));
+        assert!(matches!(store.latest(), Err(Error::Empty)));
     }
 
     #[test]
@@ -343,6 +486,18 @@ mod tests {
         ));
         assert!(dir.path.is_dir());
         assert!(tmp.path().join("keep/existing.txt").exists());
+    }
+
+    #[test]
+    fn save_explains_a_missing_parent() {
+        let (tmp, store) = store();
+        let dir = store.create(None).unwrap();
+        let missing = tmp.path().join("missing");
+        assert!(matches!(
+            dir.save_to(&missing.join("project")),
+            Err(Error::MissingParent(p)) if p == missing
+        ));
+        assert!(dir.path.is_dir());
     }
 
     #[test]

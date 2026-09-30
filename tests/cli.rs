@@ -32,7 +32,9 @@ fn create_rejects_invalid_labels() {
         .args(["create", "my label"])
         .assert()
         .code(2)
-        .stderr(predicate::str::contains("may only contain letters"));
+        .stderr(predicate::str::contains(
+            "labels may only contain letters, digits, '-', '_' and '.' (try 'my-label')",
+        ));
     sb.tempit()
         .args(["create", "42"])
         .assert()
@@ -54,24 +56,86 @@ fn path_resolves_ids_labels_and_the_latest() {
 #[test]
 fn path_reports_what_is_missing() {
     let sb = Sandbox::new();
-    sb.tempit()
-        .arg("path")
-        .assert()
-        .code(1)
-        .stderr("tempit: there are no tracked directories\n");
+    sb.tempit().arg("path").assert().code(1).stderr(
+        "error: there are no temporary directories yet\n  \
+             tip: create one with `tempit create [LABEL]`\n",
+    );
 
-    sb.run(&["create", "same"]);
-    sb.run(&["create", "same"]);
+    sb.run(&["create", "test"]);
+    sb.tempit().args(["path", "9"]).assert().code(1).stderr(
+        "error: no directory matches id 9\n  \
+             tip: `tempit list` shows the ids and labels in use\n",
+    );
     sb.tempit()
-        .args(["path", "9"])
+        .args(["path", "tst"])
         .assert()
         .code(1)
-        .stderr("tempit: no tracked directory matches id 9\n");
+        .stderr("error: no directory matches label 'tst'\n  tip: did you mean 'test'?\n");
+
+    // Duplicate labels can only come from directories created by hand.
+    fs::create_dir(sb.root().join("7-dup")).unwrap();
+    fs::create_dir(sb.root().join("8-dup")).unwrap();
     sb.tempit()
-        .args(["path", "same"])
+        .args(["path", "dup"])
         .assert()
         .code(1)
-        .stderr(predicate::str::contains("(1-same, 2-same); use its id"));
+        .stderr(predicate::str::contains(
+            "label 'dup' matches several directories: 7-dup, 8-dup",
+        ));
+}
+
+#[test]
+fn labels_are_unique() {
+    let sb = Sandbox::new();
+    sb.run(&["create", "api"]);
+    sb.tempit()
+        .args(["create", "api"])
+        .assert()
+        .code(1)
+        .stdout("")
+        .stderr(
+            "error: label 'api' is already used by 1-api\n  \
+             tip: pick another label, or go there with `tempg api`\n",
+        );
+}
+
+#[test]
+fn dot_is_the_directory_you_are_in() {
+    let sb = Sandbox::new();
+    sb.run(&["create", "work"]);
+    sb.run(&["create"]);
+    let nested = sb.root().join("1-work/src/deep");
+    fs::create_dir_all(&nested).unwrap();
+
+    let path = sb
+        .tempit()
+        .args(["path", "."])
+        .current_dir(&nested)
+        .output();
+    assert_eq!(
+        String::from_utf8(path.unwrap().stdout).unwrap(),
+        line(sb.root().join("1-work"))
+    );
+
+    sb.tempit()
+        .args(["rm", "."])
+        .current_dir(&nested)
+        .assert()
+        .success()
+        .stderr("Removed 1-work\n");
+    assert_eq!(sb.run(&["__refs"]), "2\t\n");
+}
+
+#[test]
+fn dot_outside_any_directory_explains_itself() {
+    let sb = Sandbox::new();
+    sb.run(&["create"]);
+    for args in [&["path", "."][..], &["save"]] {
+        sb.tempit().args(args).assert().code(1).stderr(
+            "error: the current directory is not inside a temporary directory\n  \
+                 tip: `tempit list` shows the ids and labels in use\n",
+        );
+    }
 }
 
 #[test]
@@ -80,14 +144,38 @@ fn list_prints_a_plain_table_when_piped() {
     sb.run(&["create", "alpha"]);
     fs::write(sb.root().join("1-alpha/notes.txt"), "hello").unwrap();
 
-    let out = sb.run(&["list"]);
+    let expected = format!(
+        "   #  LABEL  AGE  SIZE  CONTENTS\n   1  alpha  now   5 B  1 file\n\n\
+         1 directory, 5 B in {}\n",
+        sb.root().display()
+    );
+    assert_eq!(
+        sb.run(&["list"]),
+        expected,
+        "plain, without colours, when piped"
+    );
+    assert_eq!(sb.run(&[]), expected, "`tempit` alone lists");
+}
 
-    let lines: Vec<&str> = out.lines().collect();
-    assert_eq!(lines.len(), 2, "{out}");
-    assert!(lines[0].starts_with("#  LABEL"));
-    assert!(lines[1].starts_with("1  alpha  now"));
-    assert!(lines[1].contains("5 B  1 file, 0 dirs"));
-    assert!(!out.contains('\x1b'), "no colours when piped");
+#[test]
+fn list_marks_the_directory_you_are_in() {
+    let sb = Sandbox::new();
+    sb.run(&["create"]);
+    sb.run(&["create", "here"]);
+    let inside = sb.root().join("2-here/sub");
+    fs::create_dir(&inside).unwrap();
+
+    let output = sb
+        .tempit()
+        .arg("list")
+        .current_dir(&inside)
+        .output()
+        .unwrap();
+    let out = String::from_utf8(output.stdout).unwrap();
+
+    assert!(out.contains("\n   1  -  "), "{out}");
+    assert!(out.contains("\n▶  2  here  "), "{out}");
+    assert!(out.ends_with("(▶ = current directory)\n"), "{out}");
 }
 
 #[test]
@@ -112,7 +200,7 @@ fn remove_keeps_other_ids_stable() {
         .args(["remove", "2"])
         .assert()
         .success()
-        .stderr(predicate::str::contains("Removed"));
+        .stderr("Removed 2\n");
 
     assert_eq!(sb.run(&["__refs"]), "1\t\n3\t\n");
     assert_eq!(sb.run(&["create"]), line(sb.root().join("4")));
@@ -141,18 +229,17 @@ fn clean_requires_confirmation() {
     sb.run(&["create"]);
 
     // Tests have no terminal, so tempit must refuse rather than guess.
-    sb.tempit()
-        .arg("clean")
-        .assert()
-        .code(1)
-        .stderr(predicate::str::contains("pass --yes"));
+    sb.tempit().arg("clean").assert().code(1).stderr(
+        "error: refusing to delete 2 directories (0 B) without confirmation\n  \
+             tip: pass --yes to confirm\n",
+    );
     assert_eq!(sb.run(&["__refs"]), "1\t\n2\t\n");
 
     sb.tempit()
         .args(["clean", "--yes"])
         .assert()
         .success()
-        .stderr("Removed 2 directories.\n");
+        .stderr("Removed 2 directories (0 B).\n");
     assert_eq!(sb.run(&["__refs"]), "");
 
     // `clean-all` still works for users of the previous version.
@@ -198,6 +285,49 @@ fn save_accepts_a_relative_destination() {
 }
 
 #[test]
+fn save_defaults_to_the_directory_you_are_in() {
+    let sb = Sandbox::new();
+    sb.run(&["create", "keep"]);
+    let inside = sb.root().join("1-keep/sub");
+    fs::create_dir(&inside).unwrap();
+
+    sb.tempit()
+        .arg("save")
+        .current_dir(&inside)
+        .assert()
+        .success()
+        .stdout(line(sb.save_dir().join("keep")));
+    assert!(sb.save_dir().join("keep/sub").is_dir());
+}
+
+#[test]
+fn save_rejects_a_path_given_as_reference() {
+    let sb = Sandbox::new();
+    sb.run(&["create"]);
+    sb.tempit()
+        .args(["save", "/tmp/project"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "expected an id, a label or '.', not a path",
+        ));
+}
+
+#[test]
+fn save_explains_a_missing_parent() {
+    let sb = Sandbox::new();
+    sb.run(&["create"]);
+    sb.tempit()
+        .args(["save", "1", "nope/project"])
+        .assert()
+        .code(1)
+        .stderr(format!(
+            "error: {} does not exist\n  tip: create it first, or save somewhere else\n",
+            sb.home().join("nope").display()
+        ));
+}
+
+#[test]
 fn save_never_overwrites() {
     let sb = Sandbox::new();
     sb.run(&["create"]);
@@ -221,10 +351,10 @@ fn io_errors_include_the_path_and_the_cause() {
         .env("TEMPIT_ROOT", &file)
         .assert()
         .code(1)
-        .stderr(predicate::str::starts_with(format!(
-            "tempit: cannot create {}: ",
+        .stderr(format!(
+            "error: cannot create {}: File exists\n",
             file.display()
-        )));
+        ));
 }
 
 #[test]
@@ -240,6 +370,32 @@ fn init_prints_the_integration_for_each_shell() {
 
     sb.tempit().args(["init", "fish"]).assert().code(2);
     assert!(!sb.root().exists(), "init must not touch the filesystem");
+}
+
+#[test]
+fn init_detects_the_shell() {
+    let sb = Sandbox::new();
+    sb.tempit()
+        .arg("init")
+        .env("SHELL", "/usr/bin/zsh")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("compdef _tempit tempit"));
+    sb.tempit()
+        .arg("init")
+        .env("SHELL", "/usr/local/bin/fish")
+        .assert()
+        .code(1)
+        .stderr(
+            "error: unsupported shell 'fish'\n  \
+             tip: tempit supports bash and zsh: `tempit init bash` or `tempit init zsh`\n",
+        );
+    sb.tempit()
+        .arg("init")
+        .env_remove("SHELL")
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("$SHELL is not set"));
 }
 
 #[test]

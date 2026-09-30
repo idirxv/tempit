@@ -66,22 +66,40 @@ fn check_navigation(shell: &str) {
 }
 
 fn check_save_follows_the_shell(shell: &str) {
-    let sb = Sandbox::new();
-    let out = run_in(
-        shell,
-        &sb,
-        "tempc keep; mkdir sub; cd sub
-         tempsave keep
-         pwd",
-    );
-    let saved = sb.save_dir().join("keep");
-    assert_eq!(out, lines(&[&saved, &saved.join("sub")]));
+    // With an explicit reference, and without one: the directory you are in.
+    for save in ["tempsave keep", "tempsave"] {
+        let sb = Sandbox::new();
+        let out = run_in(
+            shell,
+            &sb,
+            &format!(
+                "tempc keep; mkdir sub; cd sub
+                 {save} 2>&1
+                 pwd"
+            ),
+        );
+        let saved = sb.save_dir().join("keep");
+        let expected = format!(
+            "Saved to {}\n{}",
+            saved.display(),
+            lines(&[&saved.join("sub")])
+        );
+        assert_eq!(out, expected, "{save}");
+    }
 }
 
 fn check_remove_leaves_a_deleted_cwd(shell: &str) {
     let sb = Sandbox::new();
-    let out = run_in(shell, &sb, "tempc gone; temprm gone 2>/dev/null; pwd");
-    assert_eq!(out, lines(&[sb.home()]));
+    let out = run_in(
+        shell,
+        &sb,
+        "tempc gone; mkdir sub; cd sub; temprm . 2>&1; pwd",
+    );
+    let expected = format!(
+        "Removed 1-gone\nThe current directory was deleted; moved to {home}\n{home}\n",
+        home = sb.home().display()
+    );
+    assert_eq!(out, expected);
 }
 
 fn check_help_is_not_swallowed(shell: &str) {

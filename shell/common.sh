@@ -19,7 +19,10 @@ __tempit_cd() {
 __tempit_delete() {
   command tempit "$@"
   local __tempit_status=$?
-  [[ -d $PWD ]] || builtin cd -- "$HOME" || return
+  if [[ ! -d $PWD ]]; then
+    builtin cd -- "$HOME" || return
+    printf 'The current directory was deleted; moved to %s\n' "$HOME" >&2
+  fi
   return "$__tempit_status"
 }
 
@@ -32,23 +35,24 @@ tempg() { __tempit_cd path "$@"; }
 # List directories: templ
 templ() { command tempit list "$@"; }
 
-# Delete directories: temprm REF...
+# Delete directories (`.` is the one you are in): temprm REF...
 temprm() { __tempit_delete remove "$@"; }
 
 # Delete all directories: tempclean [--yes]
 tempclean() { __tempit_delete clean "$@"; }
 
-# Move a directory somewhere permanent: tempsave REF [DEST]
-# If the shell is inside it, follows it to its new location.
+# Move a directory somewhere permanent: tempsave [REF] [DEST]
+# REF defaults to the directory you are in. If the shell is inside the saved
+# directory, it follows it to its new location.
 tempsave() {
-  if [[ $# -eq 0 || $1 == -* ]]; then
+  if [[ $1 == -* ]]; then
     command tempit save "$@"
     return
   fi
   local __tempit_src __tempit_dst
-  __tempit_src="$(command tempit path -- "$1")" || return
+  __tempit_src="$(command tempit path -- "${1:-.}")" || return
   __tempit_dst="$(command tempit save "$@")" || return
-  printf '%s\n' "$__tempit_dst"
+  printf 'Saved to %s\n' "$__tempit_dst" >&2
   case $PWD/ in
     "$__tempit_src"/*)
       if [[ -d $__tempit_dst ]]; then
