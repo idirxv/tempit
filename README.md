@@ -9,16 +9,19 @@ Create throwaway working directories, jump between them, and keep the ones that 
 to matter, without losing track of anything in `/tmp`.
 
 ```console
-$ tempc bugfix                 # create /tmp/tempit-1000/1-bugfix and cd into it
-$ tempc                        # create /tmp/tempit-1000/2
-$ templ
-#  LABEL   AGE     SIZE  CONTENTS         PATH
-1  bugfix  12m  1.2 MiB  4 files, 1 dir   /tmp/tempit-1000/1-bugfix
-2  -       now      0 B  0 files, 0 dirs  /tmp/tempit-1000/2
-$ tempg bugfix                 # back to it (or: tempg 1; plain tempg = the latest)
-$ tempsave bugfix ~/projects   # keep it: moved to ~/projects/bugfix, your shell follows
-$ temprm 2                     # delete one
-$ tempclean                    # delete them all (asks first)
+$ tempc bugfix     # create /tmp/tempit-1000/1-bugfix and cd into it
+$ tempc            # create /tmp/tempit-1000/2 and cd into it
+$ tempg bugfix     # back to bugfix (or: tempg 1; plain tempg = the latest)
+$ templ            # or just: tempit
+   #  LABEL   AGE     SIZE  CONTENTS
+▶  1  bugfix  12m  1.2 MiB  4 files, 1 dir
+   2  -       now      0 B  empty
+
+2 directories, 1.2 MiB in /tmp/tempit-1000
+(▶ = current directory)
+$ tempsave         # keep the one you are in: moved to ~/tempit/bugfix, your shell follows
+$ temprm 2         # delete one (temprm . deletes the one you are in)
+$ tempclean        # delete them all: shows what will go, then asks
 ```
 
 ## Install
@@ -32,7 +35,8 @@ cargo install tempit
 Or download a prebuilt binary (Linux x86_64/aarch64, static; macOS Intel/Apple Silicon) from
 the [releases page](https://github.com/idirxv/tempit/releases) and put it on your `PATH`.
 
-Then enable the shell integration, which provides the `temp*` functions and tab completion:
+Then enable the shell integration, which provides the `temp*` functions and tab completion.
+Run `tempit init` to see what to add for your shell, or add it directly:
 
 ```bash
 # ~/.bashrc
@@ -48,13 +52,25 @@ eval "$(tempit init zsh)"
 |---|---|---|
 | `tempc [LABEL]` | `tempit create [LABEL]` | Create a directory and `cd` into it |
 | `tempg [REF]` | `tempit path [REF]` | `cd` into a directory (default: the latest) |
-| `templ` | `tempit list` | List directories with their age, size and contents |
+| `templ` | `tempit` or `tempit list` | List directories; `▶` marks the one you are in |
 | `temprm REF...` | `tempit remove REF...` | Delete directories |
-| `tempsave REF [DEST]` | `tempit save REF [DEST]` | Move a directory somewhere permanent |
-| `tempclean [-y]` | `tempit clean [-y]` | Delete all directories, after confirmation |
+| `tempsave [REF] [DEST]` | `tempit save [REF] [DEST]` | Move a directory somewhere permanent (default: the one you are in) |
+| `tempclean [-y]` | `tempit clean [-y]` | Delete all directories, after showing them and asking |
 
-A `REF` is an id (`3`) or a label (`bugfix`). The commands print paths, so they also compose
-in scripts: `cp report.txt "$(tempit path)"`.
+A `REF` is an id (`3`), a label (`bugfix`), or `.` for the directory you are in (from anywhere
+inside it). The commands print paths, so they also compose in scripts:
+`cp report.txt "$(tempit path)"`.
+
+When something goes wrong, tempit says what to do about it:
+
+```console
+$ tempc api
+error: label 'api' is already used by 1-api
+  tip: pick another label, or go there with `tempg api`
+$ tempg aip
+error: no directory matches label 'aip'
+  tip: did you mean 'api'?
+```
 
 ## How it works
 
@@ -66,8 +82,9 @@ in scripts: `cp report.txt "$(tempit path)"`.
   `<id>` or `<id>-<label>`. There is no index file that can go stale.
 - **Stable ids.** Ids never shift: removing `2` leaves `3` as `3`. The next id is the highest
   one plus one, so numbers stay small and restart at `1` once everything is cleaned.
-- **Labels** may contain letters, digits, `-`, `_` and `.` (no spaces), and cannot be only
-  digits, which are reserved for ids.
+- **Labels** are unique, so a label always designates one directory. They may contain
+  letters, digits, `-`, `_` and `.` (no spaces; `tempc "my project"` suggests `my-project`),
+  and cannot be only digits, which are reserved for ids.
 - **Saving** moves the directory to `DEST`, like `mv`: into `DEST` if it is an existing
   directory, otherwise to that path. Without `DEST`, it goes to `~/tempit/<label>` (or
   `~/tempit/tempit-<id>` when unlabelled). It never overwrites anything and works across

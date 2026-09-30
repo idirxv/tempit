@@ -23,9 +23,10 @@ shellcheck shell/common.sh && shellcheck --shell=bash shell/completion.bash
 
 ```
 main.rs   parse CLI (cli.rs), build Config (config.rs), dispatch, print errors
-  ├── store.rs   Store: open (0700 root, owner check), list, create (flock'd), resolve
+  ├── store.rs   Store: open (0700 root, owner check), list, create (flock'd, unique labels),
+  │              resolve (+ "did you mean"), latest, containing (what `.` means)
   │              TrackedDir: remove, save_to
-  ├── name.rs    Label / DirRef / DirName: naming rules `<id>` or `<id>-<label>`
+  ├── name.rs    Label / DirRef (id, label or `.`) / DirName: `<id>` or `<id>-<label>`
   ├── fsx.rs     move_dir: no-clobber rename, cross-device copy fallback (copy_tree)
   ├── stats.rs   DirStats::collect: size, counts, birth time (display only)
   ├── render.rs  aligned table + human_size / human_age
@@ -33,11 +34,16 @@ main.rs   parse CLI (cli.rs), build Config (config.rs), dispatch, print errors
 ```
 
 - **The filesystem is the source of truth**: no index file. A directory is tracked iff it is in
-  the root and its name parses as `DirName`. Ids are stable; next id = highest + 1.
+  the root and its name parses as `DirName`. Ids are stable; next id = highest + 1. Labels
+  are unique (checked under the lock).
 - **Root**: `$TEMPIT_ROOT`, else `$TMPDIR/tempit-<uid>`. `save` defaults to `$TEMPIT_SAVE_DIR`
-  or `~/tempit`. Environment is read only in `Config::from_env`; everything else takes paths.
-- **Output contract**: stdout carries data only (paths, table, `__refs`); messages go to
-  stderr. Errors are one `Error` enum (thiserror) printed as `tempit: <msg>: <cause>`, exit 1.
+  or `~/tempit`. Environment (including the working directory for `.` and `$SHELL` for
+  `init`) is read only in `Config::from_env`; everything else takes it as parameters.
+- **Output contract**: stdout carries data only (paths, table, `__refs`, init script);
+  messages and prompts go to stderr. Errors are one `Error` enum (thiserror), printed like
+  clap's: `error: <msg>: <cause>` then `  tip: <what to do>` from `Error::tip()`, exit 1.
+  Every error a user can hit should have a tip. `tempit init` on a terminal prints setup
+  instructions instead of the script.
 - **Shell integration**: `temp*` functions wrap the binary and never shadow `tempit`.
   Completion lists subcommands by hand; `shell::tests` fails if one is missing.
   Candidates come from the hidden `tempit __refs` command.
