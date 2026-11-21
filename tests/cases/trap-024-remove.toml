@@ -1,0 +1,7 @@
+bin.name = "tempit"
+args = ["remove", "9007199254740993"]
+status.code = 1
+fs.sandbox = true
+
+[env.add]
+TEMPIT_STORAGE_FILE = "tempit_dirs.json"

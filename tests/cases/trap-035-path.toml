@@ -1,0 +1,7 @@
+bin.name = "tempit"
+args = ["path", "18446744073709551616"]
+status.code = 0
+fs.sandbox = true
+
+[env.add]
+TEMPIT_STORAGE_FILE = "tempit_dirs.json"
