@@ -1,15 +1,21 @@
 # Tempit — Temporary Directory Manager
 
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/355fe09860a44384a5efe8580fbfc20a)](https://app.codacy.com/gh/idirxv/tempit/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
+[![Rust](https://img.shields.io/badge/rust-2024-orange)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-CLI + shell helper to create, track, and jump into temporary directories without losing them.
+Fast CLI + shell helper written in Rust to create, track, and jump into temporary directories without losing them.
 
 ## Install
 
 ```bash
-pip install tempit-manager
+cargo install --path .
+```
+
+Or build the release binary directly:
+
+```bash
+cargo build --release
+cp target/release/tempit ~/.local/bin/tempit
 ```
 
 Add shell integration to `~/.bashrc` or `~/.zshrc`:
@@ -41,7 +47,7 @@ tempit init <shell>
 tempit --version
 ```
 
-Tracked metadata lives at `/tmp/tempit_dirs.json`.
+Tracked metadata lives at `/tmp/tempit_dirs.json` by default (configurable via `TEMPIT_STORAGE_FILE`).
 
 ## License
 
