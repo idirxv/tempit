@@ -1,9 +1,0 @@
----
-engines:
-  bandit:
-    exclude_paths:
-      - "tests/**"
-exclude_paths:
-  - "pyproject.toml"
-  - "poetry.lock"
-  - ".github/**"
