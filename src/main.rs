@@ -5,8 +5,6 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 use tempit::TempitManager;
 
-const VERSION: &str = "1.1";
-
 #[derive(Parser)]
 #[command(
     name = "tempit",
@@ -96,7 +94,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
 
     if cli.version {
-        println!("{VERSION}");
+        println!("{}", env!("CARGO_PKG_VERSION"));
         return ExitCode::SUCCESS;
     }
 
