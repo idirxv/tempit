@@ -43,12 +43,12 @@ enum Commands {
     },
     /// Remove all tracked temporary directories
     CleanAll,
-    /// Get directory path by number
+    /// Get directory path by number, or the most recent directory if omitted
     #[command(hide = true)]
     Path {
-        /// Number of the directory
+        /// Number of the directory (defaults to most recently created)
         #[arg(allow_hyphen_values = true)]
-        number: String,
+        number: Option<String>,
     },
 }
 
@@ -150,20 +150,32 @@ fn main() -> ExitCode {
                 ExitCode::from(1)
             }
         }
-        Commands::Path { number } => {
-            let n = match parse_number_arg("path", &number) {
-                Ok(Some(n)) => n,
-                Ok(None) => {
-                    println!();
-                    return ExitCode::SUCCESS;
+        Commands::Path { number } => match number {
+            Some(raw) => {
+                let n = match parse_number_arg("path", &raw) {
+                    Ok(Some(n)) => n,
+                    Ok(None) => {
+                        println!();
+                        return ExitCode::SUCCESS;
+                    }
+                    Err(code) => return code,
+                };
+                match mgr.get_path_by_number(n) {
+                    Some(path) => println!("{}", path.display()),
+                    None => println!(),
                 }
-                Err(code) => return code,
-            };
-            match mgr.get_path_by_number(n) {
-                Some(path) => println!("{}", path.display()),
-                None => println!(),
+                ExitCode::SUCCESS
             }
-            ExitCode::SUCCESS
-        }
+            None => match mgr.get_most_recent_path() {
+                Some(path) => {
+                    println!("{}", path.display());
+                    ExitCode::SUCCESS
+                }
+                None => {
+                    eprintln!("ERROR: No temporary directories found.");
+                    ExitCode::from(1)
+                }
+            },
+        },
     }
 }

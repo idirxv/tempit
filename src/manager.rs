@@ -81,6 +81,11 @@ impl TempitManager {
         self.storage.get_path_by_number(number)
     }
 
+    pub fn get_most_recent_path(&self) -> Option<PathBuf> {
+        let _ = self.storage.prune_stale();
+        self.storage.get_most_recent_path()
+    }
+
     pub fn clean_all_directories(&self) -> io::Result<()> {
         self.storage.prune_stale()?;
         let directories = self.storage.get_all_directories();
@@ -143,6 +148,86 @@ mod tests {
         assert_eq!(mgr.storage.get_all_directories().len(), 1);
         assert_eq!(mgr.storage.prune_stale().unwrap(), 1);
         assert!(mgr.storage.get_all_directories().is_empty());
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn get_most_recent_path_empty_returns_none() {
+        let base =
+            std::env::temp_dir().join(format!("tempit_mgr_recent_empty_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let mgr = TempitManager::new(base.join("tempit_dirs.json"), base.join("dirs")).unwrap();
+
+        assert_eq!(mgr.get_most_recent_path(), None);
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn get_most_recent_path_returns_latest_and_prunes_stale() {
+        let base =
+            std::env::temp_dir().join(format!("tempit_mgr_recent_prune_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let mgr = TempitManager::new(base.join("tempit_dirs.json"), base.join("dirs")).unwrap();
+
+        let p1 = mgr.create("first").unwrap();
+        let p2 = mgr.create("second").unwrap();
+        let p3 = mgr.create("third").unwrap();
+
+        assert_eq!(mgr.get_most_recent_path(), Some(p3.clone()));
+
+        // Remove newest directory on disk; get_most_recent_path should prune it and return p2
+        fs::remove_dir_all(&p3).unwrap();
+        assert_eq!(mgr.get_most_recent_path(), Some(p2.clone()));
+        assert_eq!(mgr.storage.get_all_directories().len(), 2);
+
+        // Remove remaining directories on disk; should prune all and return None
+        fs::remove_dir_all(&p1).unwrap();
+        fs::remove_dir_all(&p2).unwrap();
+        assert_eq!(mgr.get_most_recent_path(), None);
+        assert!(mgr.storage.get_all_directories().is_empty());
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn get_most_recent_path_uses_created_timestamp() {
+        use chrono::NaiveDate;
+
+        let base =
+            std::env::temp_dir().join(format!("tempit_mgr_recent_ts_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        let dir_old = base.join("old");
+        let dir_new = base.join("new");
+        fs::create_dir_all(&dir_old).unwrap();
+        fs::create_dir_all(&dir_new).unwrap();
+
+        let mgr = TempitManager::new(base.join("tempit_dirs.json"), base.join("dirs")).unwrap();
+        mgr.storage
+            .add_directory(DirectoryInfo {
+                path: dir_new.clone(),
+                created: NaiveDate::from_ymd_opt(2026, 6, 1)
+                    .unwrap()
+                    .and_hms_opt(12, 0, 0)
+                    .unwrap(),
+                prefix: "new".to_string(),
+            })
+            .unwrap();
+        mgr.storage
+            .add_directory(DirectoryInfo {
+                path: dir_old.clone(),
+                created: NaiveDate::from_ymd_opt(2026, 1, 1)
+                    .unwrap()
+                    .and_hms_opt(12, 0, 0)
+                    .unwrap(),
+                prefix: "old".to_string(),
+            })
+            .unwrap();
+
+        assert_eq!(mgr.get_most_recent_path(), Some(dir_new));
 
         let _ = fs::remove_dir_all(&base);
     }

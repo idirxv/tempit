@@ -113,6 +113,14 @@ impl DirectoryStorage {
         Some(directories[(number - 1) as usize].path.clone())
     }
 
+    /// Return the path of the most recently created tracked directory.
+    pub fn get_most_recent_path(&self) -> Option<PathBuf> {
+        self.get_all_directories()
+            .into_iter()
+            .max_by_key(|d| d.created)
+            .map(|d| d.path)
+    }
+
     pub fn remove_directory(&self, path: &Path) -> io::Result<()> {
         let directories: Vec<DirectoryInfo> = self
             .read_directories()
