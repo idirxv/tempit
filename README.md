@@ -1,5 +1,7 @@
 # Tempit — Temporary Directory Manager
 
+[![Crates.io](https://img.shields.io/crates/v/tempit.svg)](https://crates.io/crates/tempit)
+[![GitHub Release](https://img.shields.io/github/v/release/idirxv/tempit)](https://github.com/idirxv/tempit/releases/latest)
 [![Rust](https://img.shields.io/badge/rust-2024-orange)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
