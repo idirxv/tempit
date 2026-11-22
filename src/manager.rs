@@ -1,5 +1,6 @@
 //! High-level manager orchestrating storage, filesystem service, stats, and rendering.
 
+use std::collections::{HashMap, HashSet};
 use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 
@@ -12,8 +13,45 @@ use crate::storage::{DirectoryStorage, PrefixLookup};
 /// Embedded Bash/Zsh shell integration script.
 pub const INIT_SH: &str = include_str!("shell/init.sh");
 
+/// Embedded Bash completion script.
+pub const COMPLETION_BASH: &str = include_str!("shell/completion.bash");
+
+/// Embedded Zsh completion script.
+pub const COMPLETION_ZSH: &str = include_str!("shell/completion.zsh");
+
 /// Embedded Fish shell integration script.
 pub const INIT_FISH: &str = include_str!("shell/init.fish");
+
+/// Embedded Fish completion script.
+pub const COMPLETION_FISH: &str = include_str!("shell/completion.fish");
+
+/// Category of dynamic completion candidates to generate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompletionKind {
+    /// Tracked directory 1-based numbers only (for `temprm` / `tempit remove`).
+    Numbers,
+    /// Tracked directory 1-based numbers and prefixes (for `tempg` / `tempit path`).
+    Targets,
+}
+
+/// A single shell completion candidate with an optional human-readable description.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompletionCandidate {
+    pub value: String,
+    pub description: String,
+}
+
+fn sanitize_completion_field(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if matches!(c, '\t' | '\n' | '\r') {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect()
+}
 
 /// Main manager for temporary directory operations.
 #[derive(Debug, Clone)]
@@ -34,10 +72,11 @@ impl TempitManager {
         Self::new(DirectoryStorage::default_path(), std::env::temp_dir())
     }
 
-    pub fn init_script(shell: &str) -> Option<&'static str> {
+    pub fn init_script(shell: &str) -> Option<String> {
         match shell {
-            "bash" | "zsh" => Some(INIT_SH),
-            "fish" => Some(INIT_FISH),
+            "bash" => Some(format!("{INIT_SH}\n{COMPLETION_BASH}")),
+            "zsh" => Some(format!("{INIT_SH}\n{COMPLETION_ZSH}")),
+            "fish" => Some(format!("{INIT_FISH}\n{COMPLETION_FISH}")),
             _ => None,
         }
     }
@@ -100,6 +139,46 @@ impl TempitManager {
     pub fn get_path_by_prefix(&self, prefix: &str) -> PrefixLookup {
         let _ = self.storage.prune_stale();
         self.storage.get_path_by_prefix(prefix)
+    }
+
+    pub fn completion_candidates(&self, kind: CompletionKind) -> Vec<CompletionCandidate> {
+        let _ = self.storage.prune_stale();
+        let directories = self.storage.get_all_directories();
+        let mut candidates = Vec::with_capacity(directories.len() * 2);
+        let mut seen = HashSet::new();
+
+        for (idx, dir) in directories.iter().enumerate() {
+            let num = (idx + 1).to_string();
+            let desc =
+                sanitize_completion_field(&format!("{} ({})", dir.prefix, dir.path.display()));
+            seen.insert(num.clone());
+            candidates.push(CompletionCandidate {
+                value: num,
+                description: desc,
+            });
+        }
+
+        if kind == CompletionKind::Targets {
+            let mut counts: HashMap<&str, usize> = HashMap::new();
+            for dir in &directories {
+                *counts.entry(dir.prefix.as_str()).or_insert(0) += 1;
+            }
+            for dir in &directories {
+                let value = sanitize_completion_field(&dir.prefix);
+                if value.is_empty() || !seen.insert(value.clone()) {
+                    continue;
+                }
+                let count = counts.get(dir.prefix.as_str()).copied().unwrap_or(1);
+                let description = if count > 1 {
+                    format!("{count} directories")
+                } else {
+                    sanitize_completion_field(&dir.path.display().to_string())
+                };
+                candidates.push(CompletionCandidate { value, description });
+            }
+        }
+
+        candidates
     }
 
     pub fn clean_all_directories(&self) -> io::Result<()> {
@@ -349,10 +428,62 @@ mod tests {
 
     #[test]
     fn init_script_returns_matching_script_or_none() {
-        assert_eq!(TempitManager::init_script("bash"), Some(INIT_SH));
-        assert_eq!(TempitManager::init_script("zsh"), Some(INIT_SH));
-        assert_eq!(TempitManager::init_script("fish"), Some(INIT_FISH));
+        assert_eq!(
+            TempitManager::init_script("bash"),
+            Some(format!("{INIT_SH}\n{COMPLETION_BASH}"))
+        );
+        assert_eq!(
+            TempitManager::init_script("zsh"),
+            Some(format!("{INIT_SH}\n{COMPLETION_ZSH}"))
+        );
+        assert_eq!(
+            TempitManager::init_script("fish"),
+            Some(format!("{INIT_FISH}\n{COMPLETION_FISH}"))
+        );
         assert_eq!(TempitManager::init_script("csh"), None);
         assert_eq!(TempitManager::init_script(""), None);
+    }
+
+    #[test]
+    fn completion_candidates_empty_numbers_targets_dedup_and_prune() {
+        let base = std::env::temp_dir().join(format!("tempit_mgr_complete_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let mgr = TempitManager::new(base.join("tempit_dirs.json"), base.join("dirs")).unwrap();
+
+        assert!(
+            mgr.completion_candidates(CompletionKind::Numbers)
+                .is_empty()
+        );
+        assert!(
+            mgr.completion_candidates(CompletionKind::Targets)
+                .is_empty()
+        );
+
+        let p1 = mgr.create("api").unwrap();
+        let p2 = mgr.create("web").unwrap();
+        let p3 = mgr.create("api").unwrap();
+
+        let numbers = mgr.completion_candidates(CompletionKind::Numbers);
+        let number_vals: Vec<&str> = numbers.iter().map(|c| c.value.as_str()).collect();
+        assert_eq!(number_vals, vec!["1", "2", "3"]);
+        assert!(numbers[0].description.contains("api"));
+        assert!(numbers[0].description.contains(&p1.display().to_string()));
+
+        let targets = mgr.completion_candidates(CompletionKind::Targets);
+        let target_vals: Vec<&str> = targets.iter().map(|c| c.value.as_str()).collect();
+        assert_eq!(target_vals, vec!["1", "2", "3", "api", "web"]);
+
+        // Prune stale directory on disk
+        fs::remove_dir_all(&p2).unwrap();
+        let after_prune = mgr.completion_candidates(CompletionKind::Targets);
+        let after_vals: Vec<&str> = after_prune.iter().map(|c| c.value.as_str()).collect();
+        assert_eq!(after_vals, vec!["1", "2", "api"]);
+        assert_eq!(
+            after_prune[1].description,
+            format!("api ({})", p3.display())
+        );
+
+        let _ = fs::remove_dir_all(&base);
     }
 }

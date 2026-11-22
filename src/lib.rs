@@ -8,7 +8,7 @@ pub mod services;
 pub mod stats;
 pub mod storage;
 
-pub use manager::TempitManager;
+pub use manager::{CompletionCandidate, CompletionKind, TempitManager};
 pub use models::{DirectoryInfo, DirectoryStats};
 pub use services::DirectoryService;
 pub use stats::calculate_stats;

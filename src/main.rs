@@ -3,7 +3,7 @@
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use tempit::{PrefixLookup, TempitManager};
+use tempit::{CompletionKind, PrefixLookup, TempitManager};
 
 #[derive(Parser)]
 #[command(
@@ -49,6 +49,12 @@ enum Commands {
         /// Number or prefix of the directory (defaults to most recently created)
         #[arg(allow_hyphen_values = true)]
         target: Option<String>,
+    },
+    /// Print dynamic completion candidates (value<TAB>description per line)
+    #[command(hide = true)]
+    Complete {
+        /// Candidate category: "numbers" or "targets"
+        kind: String,
     },
 }
 
@@ -222,5 +228,16 @@ fn main() -> ExitCode {
                 }
             },
         },
+        Commands::Complete { kind } => {
+            let kind = match kind.as_str() {
+                "numbers" => CompletionKind::Numbers,
+                "targets" => CompletionKind::Targets,
+                _ => return ExitCode::from(1),
+            };
+            for candidate in mgr.completion_candidates(kind) {
+                println!("{}\t{}", candidate.value, candidate.description);
+            }
+            ExitCode::SUCCESS
+        }
     }
 }
