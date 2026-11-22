@@ -26,6 +26,12 @@ Add shell integration to `~/.bashrc` or `~/.zshrc`:
 eval "$(tempit init bash)"   # or: zsh
 ```
 
+Or for Fish (`~/.config/fish/config.fish`):
+
+```fish
+tempit init fish | source
+```
+
 ## Usage
 
 After shell init, use the aliases:

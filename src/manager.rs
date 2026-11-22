@@ -12,6 +12,9 @@ use crate::storage::{DirectoryStorage, PrefixLookup};
 /// Embedded Bash/Zsh shell integration script.
 pub const INIT_SH: &str = include_str!("shell/init.sh");
 
+/// Embedded Fish shell integration script.
+pub const INIT_FISH: &str = include_str!("shell/init.fish");
+
 /// Main manager for temporary directory operations.
 #[derive(Debug, Clone)]
 pub struct TempitManager {
@@ -31,9 +34,17 @@ impl TempitManager {
         Self::new(DirectoryStorage::default_path(), std::env::temp_dir())
     }
 
+    pub fn init_script(shell: &str) -> Option<&'static str> {
+        match shell {
+            "bash" | "zsh" => Some(INIT_SH),
+            "fish" => Some(INIT_FISH),
+            _ => None,
+        }
+    }
+
     pub fn init_shell(&self, shell: &str) {
-        if matches!(shell, "bash" | "zsh") {
-            println!("{INIT_SH}");
+        if let Some(script) = Self::init_script(shell) {
+            println!("{script}");
         } else {
             eprintln!("ERROR: Unsupported shell: {shell}");
         }
@@ -334,5 +345,14 @@ mod tests {
         }
 
         let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn init_script_returns_matching_script_or_none() {
+        assert_eq!(TempitManager::init_script("bash"), Some(INIT_SH));
+        assert_eq!(TempitManager::init_script("zsh"), Some(INIT_SH));
+        assert_eq!(TempitManager::init_script("fish"), Some(INIT_FISH));
+        assert_eq!(TempitManager::init_script("csh"), None);
+        assert_eq!(TempitManager::init_script(""), None);
     }
 }

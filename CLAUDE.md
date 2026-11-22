@@ -34,7 +34,7 @@ CLI (src/main.rs) → TempitManager (src/manager.rs)
 - **src/models.rs**: `DirectoryInfo` (`path`, `created`, `prefix`; JSON-serializable) and `DirectoryStats` (`size_bytes`, `human_size`, `file_count`, `dir_count`, `age`).
 - **src/stats.rs**: Pure `calculate_stats(&dir_info)` function — no side effects, returns `None` for missing paths.
 - **src/storage.rs**: `get_all_directories()` is a pure read; `prune_stale()` is the sole method that removes stale entries; writes are atomic (`tmp` + `rename`).
-- **src/shell/init.sh**: Bash/Zsh integration embedded at compile time via `include_str!`, providing `tempc`, `tempg`, `templ`, `temprm`, `tempclean` aliases.
+- **src/shell/init.sh**, **src/shell/init.fish**: Bash/Zsh and Fish integration scripts embedded at compile time via `include_str!`, providing `tempc`, `tempg`, `templ`, `temprm`, `tempclean` commands.
 - **tests/cli_cases.rs**: 48 `trycmd` CLI regression cases in `tests/cases/`.
 
 ## Agent skills

@@ -28,9 +28,9 @@ enum Commands {
         #[arg(default_value = "tempit")]
         name: String,
     },
-    /// Initialize Tempit in the current shell (bash, zsh)
+    /// Initialize Tempit in the current shell (bash, zsh, fish)
     Init {
-        /// Shell name (e.g., bash, zsh)
+        /// Shell name (e.g., bash, zsh, fish)
         shell: String,
     },
     /// List all tracked temporary directories

@@ -1,0 +1,53 @@
+set -g __TEMPIT_EXE (command -s tempit)
+
+if test -z "$__TEMPIT_EXE"
+    echo "tempit: executable not found in PATH" >&2
+else
+    function _tempit
+        if test (count $argv) -eq 0
+            command "$__TEMPIT_EXE"
+            return $status
+        end
+
+        switch -- $argv[1]
+            case create -c
+                set -e argv[1]
+                set -l __path (command "$__TEMPIT_EXE" create $argv)
+                or return $status
+                if test -n "$__path"; and test -d "$__path"
+                    cd -- "$__path"
+                    or return $status
+                end
+            case go -g
+                set -e argv[1]
+                set -l __path (command "$__TEMPIT_EXE" path $argv)
+                or return $status
+                if test -n "$__path"; and test -d "$__path"
+                    cd -- "$__path"
+                    or return $status
+                end
+            case '*'
+                command "$__TEMPIT_EXE" $argv
+        end
+    end
+
+    function tempc --description "Create temp dir and cd into it"
+        _tempit create $argv
+    end
+
+    function tempg --description "Jump to tracked temp dir"
+        _tempit go $argv
+    end
+
+    function templ --description "List tracked temp dirs"
+        _tempit list $argv
+    end
+
+    function temprm --description "Remove tracked temp dir"
+        _tempit remove $argv
+    end
+
+    function tempclean --description "Remove all tracked temp dirs"
+        _tempit clean-all $argv
+    end
+end
