@@ -5,6 +5,15 @@ edition = "2024"
 description = "Manage and jump into temporary working directories"
 license = "MIT"
 readme = "README.md"
+repository = "https://github.com/idirxv/tempit"
+homepage = "https://github.com/idirxv/tempit"
+keywords = ["cli", "temp", "temporary", "directory", "shell"]
+categories = ["command-line-utilities"]
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.gz"
+bin-dir = "{ name }-v{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
 
 [[bin]]
 name = "tempit"
