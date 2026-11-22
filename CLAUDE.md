@@ -36,3 +36,17 @@ CLI (src/main.rs) → TempitManager (src/manager.rs)
 - **src/storage.rs**: `get_all_directories()` is a pure read; `prune_stale()` is the sole method that removes stale entries; writes are atomic (`tmp` + `rename`).
 - **src/shell/init.sh**: Bash/Zsh integration embedded at compile time via `include_str!`, providing `tempc`, `tempg`, `templ`, `temprm`, `tempclean` aliases.
 - **tests/cli_cases.rs**: 48 `trycmd` CLI regression cases in `tests/cases/`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs are tracked as GitHub Issues on `idirxv/tempit` via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout (`GLOSSARY.md` and `docs/adr/` at the repo root). See `docs/agents/domain.md`.
