@@ -3,7 +3,7 @@
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use tempit::TempitManager;
+use tempit::{PrefixLookup, TempitManager};
 
 #[derive(Parser)]
 #[command(
@@ -43,12 +43,12 @@ enum Commands {
     },
     /// Remove all tracked temporary directories
     CleanAll,
-    /// Get directory path by number, or the most recent directory if omitted
+    /// Get directory path by number or prefix, or the most recent directory if omitted
     #[command(hide = true)]
     Path {
-        /// Number of the directory (defaults to most recently created)
+        /// Number or prefix of the directory (defaults to most recently created)
         #[arg(allow_hyphen_values = true)]
-        number: Option<String>,
+        target: Option<String>,
     },
 }
 
@@ -72,21 +72,80 @@ fn print_no_such_option(subcmd: &str, arg: &str) -> ExitCode {
     ExitCode::from(2)
 }
 
-fn parse_number_arg(subcmd: &str, raw: &str) -> Result<Option<i64>, ExitCode> {
+enum RawArg {
+    Option,
+    Number(i64),
+    Overflow,
+    NonNumeric,
+}
+
+fn classify_arg(raw: &str) -> RawArg {
     if raw.starts_with('-') && raw.len() >= 2 {
-        return Err(print_no_such_option(subcmd, raw));
+        return RawArg::Option;
     }
     if !raw.is_empty() && raw.bytes().all(|b| b.is_ascii_digit()) {
-        match raw.parse::<i64>() {
-            Ok(n) => Ok(Some(n)),
-            Err(_) => {
-                eprintln!("ERROR: Invalid directory number: {raw}");
-                Ok(None)
-            }
+        return match raw.parse::<i64>() {
+            Ok(n) => RawArg::Number(n),
+            Err(_) => RawArg::Overflow,
+        };
+    }
+    RawArg::NonNumeric
+}
+
+fn parse_number_arg(subcmd: &str, raw: &str) -> Result<Option<i64>, ExitCode> {
+    match classify_arg(raw) {
+        RawArg::Option => Err(print_no_such_option(subcmd, raw)),
+        RawArg::Number(n) => Ok(Some(n)),
+        RawArg::Overflow => {
+            eprintln!("ERROR: Invalid directory number: {raw}");
+            Ok(None)
         }
-    } else {
-        eprintln!("ERROR: Invalid value for 'NUMBER': '{raw}' is not a valid integer.");
-        Err(ExitCode::from(2))
+        RawArg::NonNumeric => {
+            eprintln!("ERROR: Invalid value for 'NUMBER': '{raw}' is not a valid integer.");
+            Err(ExitCode::from(2))
+        }
+    }
+}
+
+fn resolve_path_arg(mgr: &TempitManager, raw: &str) -> ExitCode {
+    match classify_arg(raw) {
+        RawArg::Option => return print_no_such_option("path", raw),
+        RawArg::Overflow => {
+            eprintln!("ERROR: Invalid directory number: {raw}");
+            println!();
+            return ExitCode::SUCCESS;
+        }
+        RawArg::Number(n) => {
+            match mgr.get_path_by_number(n) {
+                Some(path) => println!("{}", path.display()),
+                None => println!(),
+            }
+            return ExitCode::SUCCESS;
+        }
+        RawArg::NonNumeric => {}
+    }
+
+    match mgr.get_path_by_prefix(raw) {
+        PrefixLookup::Matched(path) => {
+            println!("{}", path.display());
+            ExitCode::SUCCESS
+        }
+        PrefixLookup::NotFound => {
+            eprintln!("ERROR: No temporary directory matching prefix '{raw}'.");
+            ExitCode::from(1)
+        }
+        PrefixLookup::Ambiguous(matches) => {
+            eprintln!("ERROR: Ambiguous prefix '{raw}'. Matching directories:");
+            for candidate in matches {
+                eprintln!(
+                    "  {}: {} ({})",
+                    candidate.index,
+                    candidate.info.prefix,
+                    candidate.info.path.display()
+                );
+            }
+            ExitCode::from(1)
+        }
     }
 }
 
@@ -150,22 +209,8 @@ fn main() -> ExitCode {
                 ExitCode::from(1)
             }
         }
-        Commands::Path { number } => match number {
-            Some(raw) => {
-                let n = match parse_number_arg("path", &raw) {
-                    Ok(Some(n)) => n,
-                    Ok(None) => {
-                        println!();
-                        return ExitCode::SUCCESS;
-                    }
-                    Err(code) => return code,
-                };
-                match mgr.get_path_by_number(n) {
-                    Some(path) => println!("{}", path.display()),
-                    None => println!(),
-                }
-                ExitCode::SUCCESS
-            }
+        Commands::Path { target } => match target {
+            Some(raw) => resolve_path_arg(&mgr, &raw),
             None => match mgr.get_most_recent_path() {
                 Some(path) => {
                     println!("{}", path.display());

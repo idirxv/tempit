@@ -6,6 +6,24 @@ use std::path::{Path, PathBuf};
 
 use crate::models::DirectoryInfo;
 
+/// A candidate directory matched during prefix lookup, with its 1-based index.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrefixMatch {
+    pub index: usize,
+    pub info: DirectoryInfo,
+}
+
+/// Result of looking up a tracked directory by prefix.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PrefixLookup {
+    /// Exactly one directory matched.
+    Matched(PathBuf),
+    /// Multiple directories matched; includes 1-based indices for disambiguation.
+    Ambiguous(Vec<PrefixMatch>),
+    /// No tracked directory matched the given prefix.
+    NotFound,
+}
+
 /// Handles JSON persistence of tracked temporary directories.
 #[derive(Debug, Clone)]
 pub struct DirectoryStorage {
@@ -119,6 +137,28 @@ impl DirectoryStorage {
             .into_iter()
             .max_by_key(|d| d.created)
             .map(|d| d.path)
+    }
+
+    /// Look up a tracked directory by prefix (exact match preferred, or unique prefix match).
+    pub fn get_path_by_prefix(&self, query: &str) -> PrefixLookup {
+        if query.is_empty() {
+            return PrefixLookup::NotFound;
+        }
+        let mut exact = Vec::new();
+        let mut prefixed = Vec::new();
+        for (i, info) in self.get_all_directories().into_iter().enumerate() {
+            if info.prefix == query {
+                exact.push(PrefixMatch { index: i + 1, info });
+            } else if info.prefix.starts_with(query) {
+                prefixed.push(PrefixMatch { index: i + 1, info });
+            }
+        }
+        let candidates = if !exact.is_empty() { exact } else { prefixed };
+        match candidates.len() {
+            0 => PrefixLookup::NotFound,
+            1 => PrefixLookup::Matched(candidates.into_iter().next().unwrap().info.path),
+            _ => PrefixLookup::Ambiguous(candidates),
+        }
     }
 
     pub fn remove_directory(&self, path: &Path) -> io::Result<()> {

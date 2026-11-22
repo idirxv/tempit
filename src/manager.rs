@@ -7,7 +7,7 @@ use crate::models::{DirectoryInfo, DirectoryStats};
 use crate::render::render_entries_to;
 use crate::services::DirectoryService;
 use crate::stats::calculate_stats;
-use crate::storage::DirectoryStorage;
+use crate::storage::{DirectoryStorage, PrefixLookup};
 
 /// Embedded Bash/Zsh shell integration script.
 pub const INIT_SH: &str = include_str!("shell/init.sh");
@@ -84,6 +84,11 @@ impl TempitManager {
     pub fn get_most_recent_path(&self) -> Option<PathBuf> {
         let _ = self.storage.prune_stale();
         self.storage.get_most_recent_path()
+    }
+
+    pub fn get_path_by_prefix(&self, prefix: &str) -> PrefixLookup {
+        let _ = self.storage.prune_stale();
+        self.storage.get_path_by_prefix(prefix)
     }
 
     pub fn clean_all_directories(&self) -> io::Result<()> {
@@ -228,6 +233,105 @@ mod tests {
             .unwrap();
 
         assert_eq!(mgr.get_most_recent_path(), Some(dir_new));
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn get_path_by_prefix_exact_and_no_match() {
+        let base =
+            std::env::temp_dir().join(format!("tempit_mgr_prefix_exact_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let mgr = TempitManager::new(base.join("tempit_dirs.json"), base.join("dirs")).unwrap();
+
+        let p_api = mgr.create("api").unwrap();
+        let p_web = mgr.create("web").unwrap();
+
+        assert_eq!(mgr.get_path_by_prefix("api"), PrefixLookup::Matched(p_api));
+        assert_eq!(mgr.get_path_by_prefix("web"), PrefixLookup::Matched(p_web));
+        assert_eq!(mgr.get_path_by_prefix("unknown"), PrefixLookup::NotFound);
+        assert_eq!(mgr.get_path_by_prefix(""), PrefixLookup::NotFound);
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn get_path_by_prefix_unique_prefix_and_exact_preference() {
+        let base =
+            std::env::temp_dir().join(format!("tempit_mgr_prefix_unique_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let mgr = TempitManager::new(base.join("tempit_dirs.json"), base.join("dirs")).unwrap();
+
+        let p_api = mgr.create("api").unwrap();
+        let p_api_v2 = mgr.create("api-v2").unwrap();
+        let p_frontend = mgr.create("frontend").unwrap();
+
+        // Exact match is preferred over prefix match ("api" matches "api", not ambiguous with "api-v2")
+        assert_eq!(mgr.get_path_by_prefix("api"), PrefixLookup::Matched(p_api));
+        // Unique prefix match
+        assert_eq!(
+            mgr.get_path_by_prefix("front"),
+            PrefixLookup::Matched(p_frontend)
+        );
+        assert_eq!(
+            mgr.get_path_by_prefix("api-"),
+            PrefixLookup::Matched(p_api_v2)
+        );
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn get_path_by_prefix_ambiguous_and_prunes_stale() {
+        let base = std::env::temp_dir().join(format!(
+            "tempit_mgr_prefix_ambiguous_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let mgr = TempitManager::new(base.join("tempit_dirs.json"), base.join("dirs")).unwrap();
+
+        let _p_other = mgr.create("other").unwrap();
+        let p_api_v1 = mgr.create("api-v1").unwrap();
+        let p_api_v2 = mgr.create("api-v2").unwrap();
+
+        // Multiple prefix matches return Ambiguous with 1-based indices (2 and 3)
+        match mgr.get_path_by_prefix("api") {
+            PrefixLookup::Ambiguous(matches) => {
+                assert_eq!(matches.len(), 2);
+                assert_eq!(matches[0].index, 2);
+                assert_eq!(matches[0].info.prefix, "api-v1");
+                assert_eq!(matches[0].info.path, p_api_v1);
+                assert_eq!(matches[1].index, 3);
+                assert_eq!(matches[1].info.prefix, "api-v2");
+                assert_eq!(matches[1].info.path, p_api_v2);
+            }
+            other => panic!("expected Ambiguous, got {other:?}"),
+        }
+
+        // Removing one directory on disk prunes it so "api" now uniquely matches api-v2
+        fs::remove_dir_all(&p_api_v1).unwrap();
+        assert_eq!(
+            mgr.get_path_by_prefix("api"),
+            PrefixLookup::Matched(p_api_v2.clone())
+        );
+
+        // Multiple exact matches return Ambiguous with only the exact matches
+        let p_dup1 = mgr.create("dup").unwrap();
+        let p_dup2 = mgr.create("dup").unwrap();
+        let _p_dup_extra = mgr.create("dup-extra").unwrap();
+        match mgr.get_path_by_prefix("dup") {
+            PrefixLookup::Ambiguous(matches) => {
+                assert_eq!(matches.len(), 2);
+                assert_eq!(matches[0].index, 3);
+                assert_eq!(matches[0].info.path, p_dup1);
+                assert_eq!(matches[1].index, 4);
+                assert_eq!(matches[1].info.path, p_dup2);
+            }
+            other => panic!("expected Ambiguous, got {other:?}"),
+        }
 
         let _ = fs::remove_dir_all(&base);
     }

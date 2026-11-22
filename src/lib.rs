@@ -12,4 +12,4 @@ pub use manager::TempitManager;
 pub use models::{DirectoryInfo, DirectoryStats};
 pub use services::DirectoryService;
 pub use stats::calculate_stats;
-pub use storage::DirectoryStorage;
+pub use storage::{DirectoryStorage, PrefixLookup, PrefixMatch};
